@@ -54,6 +54,7 @@ The user-specified weighted milestones are based on completed evidence. The Figm
 
 - `git clone`: completed.
 - `xcodebuild`: unavailable on the Linux workspace; GitHub workflow not dispatched yet, so no compile, test, or IPA result is claimed.
+- The first development-branch update was published through GitHub's Git data API; no Actions run is visible for that commit yet. The build remains unvalidated.
 - XCTest target: none present in audited baseline.
 
 ## User actions eventually needed
