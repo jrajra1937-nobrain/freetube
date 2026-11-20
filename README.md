@@ -90,15 +90,15 @@ If you do not agree with these terms, do not install or use this software.
 |---|---|
 | Home / Search / Video detail | ✓ |
 | Google account login | Disabled pending official OAuth/API implementation |
-| Subscriptions / Library / History | ✓ |
-| Channel screen / Playlist screen | ✓ |
-| Like / dislike / save-to-playlist | ✓ |
-| Comments (read / write / reply / rate / translate) | ✓ |
-| Background audio + lock-screen controls + AirPlay + PiP | ✓ |
-| Downloads (user-initiated + implicit during playback) | ✓ |
-| Three-tier playback fallback for PoT-locked content | ✓ |
-| "Link" tab — universal downloader for ~2,000 sites via yt-dlp | ✓ |
-| Localization: en / es / ru / fr / de | ✓ |
+| Subscriptions / Library / History | Source present; account access disabled |
+| Channel screen / Playlist screen | Source present; account actions may be unavailable |
+| Like / dislike / save-to-playlist | Source present; account access disabled |
+| Comments | Source present; some write operations are unfinished |
+| Background audio / lock-screen / AirPlay / PiP | Source present; requires device validation |
+| Downloads | yt-dlp default access policy; availability depends on content and service |
+| HLS / progressive playback | Standard iOS player endpoint only; access failures are not bypassed |
+| "Link" tab — yt-dlp media resolver | Source present; site/content access remains conditional |
+| Localization: en / es / ru / fr / de | Source catalog present; full UI verification pending |
 | CarPlay | ✗ |
 | Chromecast | ✗ (out of scope) |
 
@@ -108,7 +108,7 @@ If you do not agree with these terms, do not install or use this software.
 
 This checkout is being prepared for a personal iPhone build. The audited upstream baseline is `8fc6d3b7be9571e3ffcb179de3d1de2dfe7012e7`. GitHub Actions in `.github/workflows/ios-build.yml` selects Xcode 26.2 on `macos-26`, resolves the checked-in Swift package lockfile, builds simulator/device targets without signing, and packages an unsigned IPA plus logs. It runs on pushes to `dev/personal-edition` and can also be started manually. No successful build is claimed until the first run completes. The IPA must be signed by a legitimate sideloading tool before installation.
 
-The account login approach and unfinished service methods are under review. Read [the security review](docs/SECURITY.md) before considering account sign-in. Progress and evidence are tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
+The upstream embedded Google sign-in and cookie capture have been disabled. Account features require a reviewed official OAuth/API implementation. The playback pipeline no longer selects alternate player profiles or keeps formats marked as requiring missing proof-of-origin tokens. Read [the security review](docs/SECURITY.md) before considering account sign-in. Progress and evidence are tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
 
 - [Architecture and upstream audit](docs/ARCHITECTURE.md)
 - [Installation](docs/INSTALLATION.md)
@@ -182,7 +182,7 @@ See `CLAUDE.md` § 6 for the exact mapping from YouTubeKit response types to ser
 
 ## Playback pipeline
 
-Playback has three independent tiers. Whichever succeeds first wins.
+Playback first uses yt-dlp's default YouTube extraction policy and then the standard iOS player endpoint. Alternate client profiles are not used to avoid service access checks. Playback may fail for content the service does not provide to this client.
 
 ```
 User taps a video
@@ -194,26 +194,17 @@ User taps a video
 │   Mux video+audio in Swift via FFmpegRunner (-c copy)       │
 │   Persists metadata to file xattrs (DownloadsStore)         │
 └─────────────────────────────────────────────────────────────┘
-        │   fails (PoT, n-cipher, 403)
+        │   if no file is produced
         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ Tier 2: YouTubeKit progressive/adaptive → local mp4         │
-│   TVHTML5 client → direct URLs (PoT-exempt)                 │
-│   or player.js scrape → cipher-decoded URLs                 │
-│   URLSession download + ffmpeg -c copy mux                  │
-│   Persists metadata to file xattrs                          │
-└─────────────────────────────────────────────────────────────┘
-        │   fails
-        ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Tier 3: AVPlayer streaming (no local file)                  │
-│   iOS HLS → iOS progressive → TVHTML5 HLS → TVHTML5 progressive │
-│   AVPlayer streams the URL directly                         │
+│ Standard iOS player endpoint                                │
+│   HLS or returned progressive formats                       │
+│   No alternate player profile or access-check workaround    │
 │   Not persisted, not offline-playable                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-For most videos, tier 1 wins and you get an offline file. For YouTube's PoT-locked / n-cipher-locked content (kids and family videos most often), tier 1 and 2 fail and tier 3 streams the HLS manifest.
+The source paths above are not yet validated in CI or on an iPhone. Content availability and background playback are conditional on service responses and applicable account/content permissions.
 
 ---
 
@@ -233,17 +224,9 @@ The `+faststart` post-pass crashes on concurrent calls (`EXC_BAD_ACCESS` in `ff_
 
 When yt-dlp's Python side calls `subprocess.Popen.communicate` against ffmpeg, the call never returns — `longjmp` tears through the Python interpreter stack. We pass `--ffmpeg-location /dev/null/no-ffmpeg` so yt-dlp fails fast at probe time instead of hanging, then mux ourselves with direct `FFmpegSupport.ffmpeg(...)` calls.
 
-### YouTube's PoT and n-cipher
+### Account sign-in stays disabled
 
-YouTube has been enforcing Proof-of-Origin Tokens and rotating the `n`-parameter cipher in player.js every 2-8 weeks. We solve the **n-cipher in-process** by faking a `deno` runtime to yt-dlp via JavaScriptCore — see CLAUDE.md §15.11 for the bridge architecture. **PoT** still requires Play-Integrity / DroidGuard attestation which a JS runtime can't provide; tier 3 streaming is the user-facing safety net for PoT-locked content.
-
-### Cookie de-duplication prefers `.youtube.com`
-
-Post-login, Apple's `WKHTTPCookieStore` returns identical cookies under both `.youtube.com` and `.google.com` scopes. YouTube only accepts the `.youtube.com` value. `CookieStore.dedupe` enforces that — length-based tiebreaking failed in practice (both scopes were 12 chars).
-
-### Login WebView must use an ephemeral data store
-
-`WKWebsiteDataStore.default()` reuses prior sessions and captures stale cookies. Login flow uses `.nonPersistent()`.
+The old WKWebView cookie-capture implementation is retained only as legacy source and is not wired to the UI. The app clears saved legacy cookies at startup and rejects sign-in. Do not re-enable it; use only a reviewed official OAuth/API approach.
 
 ### `SubscriptionRegistry` reconciles YouTubeKit's gaps
 
@@ -306,10 +289,10 @@ To add a string: use `String(localized:)` / `LocalizedStringKey` in code, build 
 
 Honest list:
 
-- **Doesn't bypass YouTube's PoT enforcement.** Affected content streams via HLS instead of downloading. (N-cipher *is* solved in-process via the JSC bridge.)
+- **Doesn't bypass YouTube's content or access checks.** Unsupported or restricted streams fail rather than switching to an exempt player profile.
 - **Doesn't attempt App Store distribution.** Sideload, TestFlight, or personal use only.
 - **Doesn't include analytics, telemetry, or remote logging.** Everything goes to `os.Logger`.
-- **Doesn't have a refresh-token flow.** Cookies expire, you re-login.
+- **Doesn't currently offer Google account sign-in.**
 - **Doesn't support Chromecast / Google Cast.** AirPlay only.
 - **Doesn't have CarPlay** yet.
 

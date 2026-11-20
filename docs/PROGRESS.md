@@ -4,12 +4,12 @@ Updated: 2026-11-20
 
 ## Overall: 15% (Figma phase validated; security hardening in progress; build unvalidated)
 
-The user-specified weighted milestones are based on completed evidence. Figma is validated at 10%; repository audit is approximately 50% complete (5%). Source-level security hardening contributes no separate weight until the security milestone is fully audited. The build workflow is configured but has not executed. No iPhone installation or media validation is claimed.
+The user-specified weighted milestones are based on completed evidence. Figma is validated at 10%; repository audit is approximately 50% complete (5%). Source-level security hardening contributes no separate weight until the security milestone is fully audited. GitHub Actions run `44774330708` is queued on macOS; no build, test, or IPA result is available yet. No iPhone installation or media validation is claimed.
 
 | Milestone | Weight | Status | Evidence |
 |---|---:|---|---|
 | Repository audit | 10% | In progress | Baseline pinned; core project, auth, player, persistence, Xcode config, packages and workflow inspected; complete dependency and runtime audit remains |
-| Original compilation | 15% | Not validated | CI workflow added but not run; `xcodebuild` unavailable in current Linux environment |
+| Original compilation | 15% | Running / queued | GitHub Actions run `44774330708` is queued on `macos-26`; job has not started |
 | iPhone installation | 15% | Not started | No signed IPA or physical device access |
 | Player validation | 15% | Source only | AVFoundation components found; no iPhone runtime tests |
 | Authentication/security | 10% | In progress | Risky cookie-capture login disabled; Keychain error handling and YouTube cookie scoping hardened; logging minimized; source/runtime audit remains |
@@ -23,10 +23,11 @@ The user-specified weighted milestones are based on completed evidence. Figma is
 - Inspected README, CLAUDE.md, LICENSE, integration guide, Xcode project, package lockfile, source tree, authentication/player entry points, and unfinished methods/TODOs; checked upstream issue tracker, dated dependency pins, and official Google OAuth/Data API documentation.
 - Added a GitHub Actions workflow for package resolution, conditional tests, simulator/device builds, unsigned IPA packaging and log artifacts. It supports manual dispatch and runs on pushes to `dev/personal-edition`.
 - Created the Figma design file with 14 iPhone screens, editable variables, reusable components and four UI states.
-- Published the audit, documentation and manual build workflow to `jrajra1937-nobrain/freetube` on `dev/personal-edition`; verified the remote branch and workflow file.
+- Published audit, documentation, security fixes, and build workflow on `jrajra1937-nobrain/freetube` branch `dev/personal-edition`; latest commit `37e267b0a1290151f4479ce6b79cbb06064712da`.
 - Blocked Google cookie-capture login in the app UI pending official OAuth/API implementation; public-content use stays available.
 - Hardened Keychain write/delete handling and exact YouTube cookie-domain checks; removed several sensitive cookie and signed-URL log paths.
 - Disabled raw diagnostic-file export because source logs can contain private identifiers or signed stream URLs; UI explains the limitation.
+- Removed alternate embedded/TV player profiles, missing-token overrides, and direct URL fallback paths that avoided YouTube Proof-of-Origin checks. Content that standard access does not allow now fails closed.
 - Added repository guidance and initial architecture/install/security/Figma/testing/maintenance documentation; verified official AltStore Windows ARM announcement and Apple free Personal Team limits.
 
 ## Outstanding
@@ -35,7 +36,7 @@ The user-specified weighted milestones are based on completed evidence. Figma is
 - Integrate Figma components into SwiftUI only after the baseline build is confirmed.
 - Complete source-level audit of all code and package/license/security/update concerns; remaining path/title/identifier logs need review.
 - Resolve compile failures found by CI before any visual redesign.
-- Decide how to handle cookie-based Google login; do not use a primary account yet.
+- Keep account features disabled until an official OAuth/API implementation is available and reviewed.
 - Implement focused XCTest coverage after baseline compilation.
 - Verify current official sideload, Windows ARM64 and Apple free-signing requirements before installation.
 - Validate media behavior on the actual iPhone 13.
@@ -56,13 +57,14 @@ The user-specified weighted milestones are based on completed evidence. Figma is
 ## Test/build results
 
 - `git clone`: completed.
-- `xcodebuild`: unavailable on the Linux workspace; GitHub workflow not dispatched yet, so no compile, test, or IPA result is claimed.
+- `xcodebuild`: unavailable on the Linux workspace. GitHub Actions run `44774330708` was observed queued, with no runner assigned and no steps started; no compile, test, or IPA result is claimed.
 - `git diff --check`: pending after the latest edits.
 - TLS verification bypass removed from yt-dlp calls; actual embedded CA availability is unknown until macOS CI/device execution.
-- The first development-branch update was published through GitHub's Git data API; no Actions run is visible for that commit yet. The build remains unvalidated.
+- Source-level scan confirms the custom `formats=missing_pot`, alternate TV player, and direct YouTubeKit fallback symbols are absent from Swift code.
+- Two earlier runs were cancelled by branch updates; the latest push created run `44774330708` and it is queued. Avoid further pushes until it finishes so the concurrency policy does not cancel it.
 - XCTest target: none present in audited baseline.
 
 ## User actions eventually needed
 
-- Review the first CI result and its unsigned IPA artifact. Manual dispatch through GitHub's Actions UI requires the workflow file to be present on the default branch; development pushes already run automatically.
+- Review the queued CI result and unsigned IPA artifact when the macOS runner completes.
 - Perform Apple account sign-in, sideload authorization, and physical iPhone validation.

@@ -34,7 +34,7 @@ No `.github/workflows` or XCTest target existed in the audited upstream tree. Th
 
 - SwiftUI screens exist for home, search/suggestions, subscriptions, account/library/history, channels, playlists, video details/comments, downloads/link fetching, login, and settings.
 - `AVQueuePlayer`, `AVPlayerViewController`, audio session, Now Playing metadata, remote command center, and a playback resolver are implemented in source. Hardware PiP, lock-screen playback, Bluetooth/AirPlay behavior, and interruptions still require device validation.
-- Cookie login uses WKWebView and stores a serialized YouTube cookie header in Keychain. `SessionManager` clears Keychain state and in-memory client cookies on sign-out.
+- The upstream cookie login code remains in source but is not reachable from the UI. Session bootstrap clears legacy cookies and sign-in is rejected.
 - SwiftData persistence models and background-download coordination are present.
 - French entries exist in the string catalog.
 
@@ -46,7 +46,7 @@ The `INTEGRATION.md` setup steps about adding folders and SPM packages are stale
 
 The upstream login flow used a WKWebView Google credential form and cookie capture, not official Google OAuth. The UI is disabled, legacy Keychain cookies are cleared at bootstrap, and the session manager rejects sign-in. Official OAuth feasibility depends on supported Google/YouTube APIs and their scopes/quota and is not a drop-in replacement. See `docs/SECURITY.md`.
 
-The project embeds yt-dlp/FFmpeg and offers downloading. That does not guarantee permission to download or play any particular content. Do not describe it as a restriction bypass.
+The project embeds yt-dlp/FFmpeg and offers downloading. The Personal Edition removes alternate player profiles and missing-token format overrides that avoided YouTube's Proof-of-Origin checks. It uses yt-dlp's default extraction policy and the standard iOS player endpoint. Access failures must be shown as failures; do not add fallback profiles that evade restrictions.
 
 ## Upstream issue tracker snapshot (2026-11-20)
 

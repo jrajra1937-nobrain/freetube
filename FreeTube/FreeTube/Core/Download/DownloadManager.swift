@@ -282,12 +282,9 @@ final class PythonSerialExecutor: SerialExecutor, @unchecked Sendable {
 /// Owns the on-disk video cache, runs YoutubeDL-iOS to fetch new ones, and surfaces progress so UI
 /// can render a live transfer queue.
 ///
-/// **Playback contract (CLAUDE.md §7 amended):**
-/// Every play tap calls `ensureDownloaded(video:quality:)`. If `Documents/<id>.mp4` already
-/// exists, we return immediately. Otherwise we kick off a yt-dlp run (via `YoutubeDL.yt_dlp(argv:)`),
-/// wait for it, write a `DownloadMetadata` xattr to the resulting file, and hand the local URL back to the resolver. This
-/// sidesteps every PoT/cookie/HLS edge case in YouTube's CDN — the bytes are on disk before
-/// AVPlayer ever sees them.
+/// Playback and downloads use yt-dlp's default extraction policy. If the service does not
+/// provide a permitted media file, the operation fails; no alternate player profile or token
+/// check workaround is attempted.
 ///
 /// **Progress:** the manager publishes a single `AsyncStream<[DownloadTaskSnapshot]>` that any
 /// observer can subscribe to. Both the Downloads screen and the per-tab badge read from it.
@@ -477,44 +474,14 @@ final class DownloadManager: TemporaryDownloading {
         // Never disable TLS certificate verification. If the embedded Python runtime has no
         // configured CA roots, the request must fail closed until a trusted CA bundle is added.
         //
-        // **No `--cookies` flag** — counter-intuitive, but yt-dlp's safety check
-        // ("Skipping client X since it does not support cookies") removes the `tv_simply`,
-        // `ios`, and `android_vr` clients from the fallback chain whenever a cookies file is
-        // present. Those are exactly the clients that give us the broadest format coverage on
-        // PoT-locked content. With cookies the surviving clients (`web_creator`, `mweb`)
-        // honestly report "No video formats found" — the bottleneck was never cookie auth, it
-        // was the JS-runtime-less n-cipher (CLAUDE.md §15.4).
+        // Do not provide captured account cookies or override yt-dlp's standard player-client
+        // and token requirements. Anonymous extraction is the only active mode.
         let argv: [String] = [
             "https://www.youtube.com/watch?v=\(video.id)",
             "-f", formatString,
             "-o", outputTemplate,
             "--no-playlist",
             "--no-progress",
-            // **Player-client fallback chain + PoT bypass.** Two interrelated knobs:
-            //
-            // `player_client=…` — explicit list of YouTube player profiles to try, in fallback
-            // order. The default yt-dlp list without a JS runtime is so narrow it commonly
-            // hits "This video is not available" on kids / region-locked / age-gated videos.
-            // We try clients with different PoT requirements:
-            //   - `tv_simply` (TVHTML5 simply-embedded-player) — broadest format coverage.
-            //   - `tv_embedded` — TV embedded player, often exempt from PoT enforcement.
-            //   - `web_creator` — creator-mode profile, also frequently PoT-exempt.
-            //   - `mweb` — mobile web, broad coverage including kids content.
-            //   - `web_safari` — desktop Safari, useful for live + premium content.
-            //   - `ios` — native iOS app profile.
-            //   - `android_vr` — last-resort fallback (was the only default).
-            //
-            // `formats=missing_pot` — **critical**. As of late-2024 yt-dlp builds, formats that
-            // YouTube has marked as requiring a Proof-of-Origin token are *filtered out by
-            // default* on the assumption they'll return HTTP 403. With every format filtered,
-            // yt-dlp falls through to "no usable formats" → `"This video is not available"`.
-            // Setting `formats=missing_pot` tells yt-dlp "keep those formats anyway — I'll try."
-            // In practice many still play because YouTube doesn't enforce PoT on every CDN
-            // edge; the ones that do 403 fall through to the next client. Without this flag we
-            // had `"...formats require a GVS PO Token which was not provided. They will be
-            // skipped..."` in the log for every client we tried, leaving zero usable formats.
-            "--extractor-args",
-            "youtube:player_client=tv_simply,tv_embedded,web_creator,mweb,web_safari,ios,android_vr;formats=missing_pot",
             // **Concurrent fragment downloads.** For HLS/DASH streams yt-dlp downloads each
             // chunk sequentially by default — bumping this lets it fetch N fragments at once
             // over the same HTTP/2 connection. Doesn't change the total bytes pulled but cuts
@@ -582,14 +549,13 @@ final class DownloadManager: TemporaryDownloading {
                     )
                 }
             }, log: { [weak self, log] level, message in
-                // Bridge yt-dlp's Python logger to os_log so its diagnostics show up alongside ours.
-                // Levels we get: debug / info / warning / error.
+                // Keep yt-dlp's raw messages out of OSLog: they can include signed stream URLs.
                 if level == "error" {
-                    log.error("yt-dlp: \(message, privacy: .public)")
+                    log.error("yt-dlp reported an error")
                 } else if level == "warning" {
-                    log.notice("yt-dlp: \(message, privacy: .public)")
+                    log.notice("yt-dlp reported a warning")
                 } else {
-                    log.info("yt-dlp: \(message, privacy: .public)")
+                    log.debug("yt-dlp emitted a diagnostic")
                 }
                 // The "[Merger]" line is yt-dlp's last visible step before it hands off to ffmpeg.
                 // ffmpeg runs CPU-bound on the device for 10–60s and emits no progress, so we flip
@@ -602,38 +568,15 @@ final class DownloadManager: TemporaryDownloading {
                 }
             }, priority: priority == .userInitiated ? .high : .low)
         } catch {
-            log.error("yt-dlp[\(video.id, privacy: .public)] threw: \(String(describing: error), privacy: .public)")
-            // **Don't fail yet** — try the YouTubeKit / TVHTML5_SIMPLY_EMBEDDED_PLAYER fallback
-            // before giving up. yt-dlp's no-JS-runtime path can produce "This video is not
-            // available" for entire classes of videos (kids content, PoT-gated music videos,
-            // some live recordings) where YouTubeKit's tvHtmlModel still returns playable URLs
-            // because that client profile is exempt from PoT enforcement on the video-info side.
-            do {
-                try await runYouTubeKitFallback(video: video, quality: quality, destination: destination, snapshotID: snapshotID)
-                let dur = Date().timeIntervalSince(startedAt)
-                log.info("yt-dlp[\(video.id, privacy: .public)] FALLBACK SUCCESS in \(String(format: "%.1f", dur), privacy: .public)s")
-                await persistDownloaded(video: video, fileURL: destination)
-                publish(snapshot: DownloadTaskSnapshot(
-                    id: snapshotID, videoID: video.id, title: video.title,
-                    state: .completed(destination), createdAt: .now
-                ))
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    self.tasks[snapshotID] = nil
-                    self.publishSnapshots()
-                }
-                return destination
-            } catch {
-                log.error("yt-dlp[\(video.id, privacy: .public)] YouTubeKit fallback also failed: \(String(describing: error), privacy: .public)")
-                publish(snapshot: DownloadTaskSnapshot(
-                    id: snapshotID,
-                    videoID: video.id,
-                    title: video.title,
-                    state: .failed(error.localizedDescription),
-                    createdAt: .now
-                ))
-                throw YouTubeServiceError.streamExtractionFailed
-            }
+            log.error("yt-dlp download failed")
+            publish(snapshot: DownloadTaskSnapshot(
+                id: snapshotID,
+                videoID: video.id,
+                title: video.title,
+                state: .failed("This content could not be downloaded."),
+                createdAt: .now
+            ))
+            throw YouTubeServiceError.streamExtractionFailed
         }
 
         let elapsed = Date().timeIntervalSince(startedAt)
@@ -693,23 +636,15 @@ final class DownloadManager: TemporaryDownloading {
         }
 
         if !FileManager.default.fileExists(atPath: destination.path) {
-            log.notice("yt-dlp[\(video.id, privacy: .public)] post-mux: destination still missing — falling back to YouTubeKit/TVHTML5")
-            // Mirror the catch-branch fallback for the "yt-dlp returned without writing"
-            // case. Same TVHTML5_SIMPLY_EMBEDDED_PLAYER path — bypasses PoT for video-info,
-            // then downloads via plain URLSession.
-            do {
-                try await runYouTubeKitFallback(video: video, quality: quality, destination: destination, snapshotID: snapshotID)
-            } catch {
-                log.error("yt-dlp[\(video.id, privacy: .public)] YouTubeKit fallback also failed: \(String(describing: error), privacy: .public)")
-                publish(snapshot: DownloadTaskSnapshot(
-                    id: snapshotID,
-                    videoID: video.id,
-                    title: video.title,
-                    state: .failed("Download finished but file not found"),
-                    createdAt: .now
-                ))
-                throw YouTubeServiceError.streamExtractionFailed
-            }
+            log.error("yt-dlp completed without creating a media file")
+            publish(snapshot: DownloadTaskSnapshot(
+                id: snapshotID,
+                videoID: video.id,
+                title: video.title,
+                state: .failed("This content could not be downloaded."),
+                createdAt: .now
+            ))
+            throw YouTubeServiceError.streamExtractionFailed
         }
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? NSNumber)?.int64Value ?? 0
@@ -826,212 +761,6 @@ final class DownloadManager: TemporaryDownloading {
     private func downloadThumbnailData(url: URL?) async -> Data? {
         guard let url else { return nil }
         return try? await URLSession.shared.data(from: url).0
-    }
-
-    // MARK: - YouTubeKit / TVHTML5 fallback
-
-    /// Last-resort path that runs when yt-dlp fails to produce a usable file. Uses
-    /// `VideoService.fetchInfoViaTVHTML5` (which goes through `YouTubeKitClient.tvHtmlModel`
-    /// — TVHTML5_SIMPLY_EMBEDDED_PLAYER context, the client profile YouTube exempts from PoT
-    /// enforcement) to get fresh stream URLs, then downloads the bytes directly via
-    /// `URLSession`. If only adaptive (video-only + audio-only) streams are available, the
-    /// two pieces are muxed back into a single `.mp4` via the same `FFmpegRunner` we use for
-    /// yt-dlp output.
-    ///
-    /// Why this works when yt-dlp doesn't: yt-dlp's defensive filter strips formats marked as
-    /// requiring a Proof-of-Origin token before download even starts. The TVHTML5 client
-    /// returns URLs that aren't tagged with that requirement, so YouTubeKit happily hands them
-    /// to us and URLSession fetches them like any other HTTPS resource.
-    private func runYouTubeKitFallback(video: Video, quality: VideoQuality, destination: URL, snapshotID: String) async throws {
-        log.info("yt-dlp[\(video.id, privacy: .public)] fallback: fetching stream info via YouTubeKit")
-        publish(snapshot: DownloadTaskSnapshot(
-            id: snapshotID, videoID: video.id, title: video.title,
-            state: .downloading(progress: 0), createdAt: .now
-        ))
-        phaseByVideoID[video.id] = "stream"
-
-        let formats = await fetchFallbackFormats(videoID: video.id)
-        log.info("yt-dlp[\(video.id, privacy: .public)] fallback: \(formats.count, privacy: .public) usable formats")
-        guard !formats.isEmpty else {
-            throw YouTubeServiceError.streamExtractionFailed
-        }
-        let maxHeight = Self.targetHeight(for: quality)
-
-        try? FileManager.default.removeItem(at: destination)
-
-        // **Strategy 1: progressive single-file format.** itag 18 (360p mp4 with both tracks)
-        // ships as a single file, no mux step. Always tried first because it's the simplest
-        // and fastest path when available.
-        if let progressive = pickBestProgressive(formats: formats, maxHeight: maxHeight),
-           let url = progressive.url {
-            log.info("yt-dlp[\(video.id, privacy: .public)] fallback: progressive height=\(progressive.height ?? 0, privacy: .public)")
-            try await downloadStream(from: url, to: destination, videoID: video.id, snapshotID: snapshotID, title: video.title)
-            return
-        }
-
-        // **Strategy 2: adaptive — separate video-only and audio-only streams.** Required for
-        // anything ≥ 720p (YouTube doesn't ship progressive at those resolutions). Download
-        // both, then mux with ffmpeg `-c copy` so we get a single playable mp4.
-        let videoFormat = pickBestVideoOnly(formats: formats, maxHeight: maxHeight)
-        let audioFormat = pickBestAudioOnly(formats: formats)
-        guard let videoFormat, let videoURL = videoFormat.url,
-              let audioFormat, let audioURL = audioFormat.url else {
-            log.error("yt-dlp[\(video.id, privacy: .public)] fallback: no suitable formats found")
-            throw YouTubeServiceError.streamExtractionFailed
-        }
-
-        let downloadsDir = destination.deletingLastPathComponent()
-        let stem = destination.deletingPathExtension().lastPathComponent
-        let videoFile = downloadsDir.appendingPathComponent("\(stem).fallback.video.mp4")
-        let audioFile = downloadsDir.appendingPathComponent("\(stem).fallback.audio.m4a")
-        defer {
-            try? FileManager.default.removeItem(at: videoFile)
-            try? FileManager.default.removeItem(at: audioFile)
-        }
-
-        log.info("yt-dlp[\(video.id, privacy: .public)] fallback: adaptive video height=\(videoFormat.height ?? 0, privacy: .public)")
-        phaseByVideoID[video.id] = "video"
-        try await downloadStream(from: videoURL, to: videoFile, videoID: video.id, snapshotID: snapshotID, title: video.title)
-        phaseByVideoID[video.id] = "audio"
-        try await downloadStream(from: audioURL, to: audioFile, videoID: video.id, snapshotID: snapshotID, title: video.title)
-        phaseByVideoID[video.id] = "muxing"
-        progressByVideoID.removeValue(forKey: video.id)
-
-        try await muxToDestination(video: videoFile, audio: audioFile, destination: destination)
-    }
-
-    /// Two-tier format fetch for the fallback path.
-    ///
-    /// 1. **`fetchInfoViaTVHTML5`** — uses `YouTubeKitClient.tvHtmlModel` (TVHTML5_SIMPLY_
-    ///    EMBEDDED_PLAYER context). PoT-exempt on the video-info side. Cheap: one HTTP call, no
-    ///    player-JS scrape. Caveat: the response carries `signatureCipher`-protected URLs for
-    ///    some videos and YouTubeKit drops those (no JS runtime to decode them on iOS), so on
-    ///    cipher-heavy content we get back zero formats.
-    ///
-    /// 2. **`fetchInfoWithFormats`** — uses `VideoInfosWithDownloadFormatsResponse`, which
-    ///    additionally scrapes the YouTube player.js and decodes signature ciphers natively
-    ///    in YouTubeKit. Slower (two HTTP calls + JS parsing) but produces direct URLs even
-    ///    for cipher-protected formats. Falls through to this tier when TVHTML5 returned
-    ///    nothing usable — exactly the case the Baby-Shark video hit.
-    ///
-    /// Either tier failing silently returns an empty array; the caller treats that as "no
-    /// fallback path available" and surfaces `streamExtractionFailed`.
-    private func fetchFallbackFormats(videoID: String) async -> [VideoFormat] {
-        let service = VideoService()
-        do {
-            let info = try await service.fetchInfoViaTVHTML5(id: videoID)
-            let usable = info.formats.filter { $0.url != nil }
-            if !usable.isEmpty {
-                log.info("[fallback] TVHTML5 returned \(info.formats.count, privacy: .public) formats, \(usable.count, privacy: .public) with URLs")
-                return usable
-            }
-            log.notice("[fallback] TVHTML5 returned \(info.formats.count, privacy: .public) formats but 0 with direct URLs (cipher-protected); trying player.js scrape")
-        } catch {
-            log.notice("[fallback] TVHTML5 fetch failed: \(String(describing: error), privacy: .public); trying player.js scrape")
-        }
-        do {
-            let result = try await service.fetchInfoWithFormats(id: videoID)
-            let usable = result.formats.filter { $0.url != nil }
-            log.info("[fallback] fetchInfoWithFormats returned \(result.formats.count, privacy: .public) formats, \(usable.count, privacy: .public) with URLs")
-            return usable
-        } catch {
-            log.error("[fallback] fetchInfoWithFormats failed: \(String(describing: error), privacy: .public)")
-            return []
-        }
-    }
-
-    /// Downloads a single stream to `destination` with periodic progress updates fed into
-    /// `handleProgress` so the UI's progress bar moves.
-    private func downloadStream(from url: URL, to destination: URL, videoID: String, snapshotID: String, title: String) async throws {
-        try? FileManager.default.removeItem(at: destination)
-        var request = URLRequest(url: url)
-        // Match the TVHTML5_SIMPLY_EMBEDDED_PLAYER user-agent we set on `tvHtmlModel`.
-        // The CDN occasionally rejects requests whose UA doesn't match the client that minted
-        // the URL.
-        request.setValue("Mozilla/5.0 (PlayStation; PlayStation 4/12.55) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
-
-        let (asyncBytes, response) = try await URLSession.shared.bytes(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw YouTubeServiceError.streamExtractionFailed
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            log.error("[fallback] HTTP \(http.statusCode, privacy: .public) from \(url.host ?? "?", privacy: .public)\(url.path, privacy: .public)")
-            throw YouTubeServiceError.streamExtractionFailed
-        }
-        let expected = http.expectedContentLength
-        let total = expected > 0 ? Int(expected) : 0
-
-        // Write the streamed bytes to disk in 64 KB chunks so we don't buffer the entire
-        // video in memory. Emit progress on every chunk; `handleProgress` itself throttles
-        // the UI publish rate to ~5/sec.
-        FileManager.default.createFile(atPath: destination.path, contents: nil)
-        guard let handle = try? FileHandle(forWritingTo: destination) else {
-            throw YouTubeServiceError.streamExtractionFailed
-        }
-        defer { try? handle.close() }
-
-        var buffer = Data()
-        buffer.reserveCapacity(65_536)
-        var written = 0
-        for try await byte in asyncBytes {
-            buffer.append(byte)
-            if buffer.count >= 65_536 {
-                try handle.write(contentsOf: buffer)
-                written += buffer.count
-                buffer.removeAll(keepingCapacity: true)
-                handleProgress(
-                    status: "downloading",
-                    downloaded: written,
-                    total: total,
-                    speed: 0,
-                    eta: 0,
-                    phase: phaseByVideoID[videoID] ?? "stream",
-                    snapshotID: snapshotID,
-                    videoID: videoID,
-                    videoTitle: title
-                )
-            }
-        }
-        if !buffer.isEmpty {
-            try handle.write(contentsOf: buffer)
-            written += buffer.count
-        }
-        try handle.close()
-        log.info("[fallback] wrote \(written, privacy: .public) bytes to \(destination.lastPathComponent, privacy: .public)")
-    }
-
-    /// Picks the highest-resolution progressive (single-file, both-tracks) format whose height
-    /// is within the user's quality cap. nil if YouTube didn't return any combined stream.
-    private func pickBestProgressive(formats: [VideoFormat], maxHeight: Int) -> VideoFormat? {
-        formats
-            .filter { $0.containsBothTracks && $0.url != nil }
-            .filter { ($0.height ?? Int.max) <= maxHeight }
-            .max { ($0.height ?? 0) < ($1.height ?? 0) }
-    }
-
-    /// Highest-resolution video-only mp4 within the cap. Prefer mp4 over webm so the downstream
-    /// `ffmpeg -c copy` mux works without re-encoding.
-    private func pickBestVideoOnly(formats: [VideoFormat], maxHeight: Int) -> VideoFormat? {
-        let candidates = formats.filter { $0.isVideoOnly && $0.url != nil && ($0.height ?? Int.max) <= maxHeight }
-        let mp4s = candidates.filter { $0.mimeType.lowercased().contains("mp4") }
-        let pool = mp4s.isEmpty ? candidates : mp4s
-        return pool.max { ($0.height ?? 0) < ($1.height ?? 0) }
-    }
-
-    /// Highest-bitrate audio-only m4a/mp4. Same mp4-preference rule as video to keep the mux
-    /// in `-c copy` territory.
-    private func pickBestAudioOnly(formats: [VideoFormat]) -> VideoFormat? {
-        let candidates = formats.filter { $0.isAudioOnly && $0.url != nil }
-        let mp4s = candidates.filter { $0.mimeType.lowercased().contains("mp4") || $0.mimeType.lowercased().contains("m4a") }
-        let pool = mp4s.isEmpty ? candidates : mp4s
-        return pool.max { ($0.bitrate ?? 0) < ($1.bitrate ?? 0) }
-    }
-
-    private static func targetHeight(for quality: VideoQuality) -> Int {
-        // Reuse the existing `heightCap` so the format selector matches yt-dlp's argv logic.
-        // `audioOnly` → 0 isn't useful for video downloads, fall back to a reasonable cap.
-        let cap = quality.heightCap ?? 1080
-        return cap > 0 ? cap : 1080
     }
 
     // MARK: - Muxing (direct ffmpeg call, no Python)

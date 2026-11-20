@@ -17,7 +17,7 @@ import OSLog
 ///
 /// **Adaptive pairing.** When the user picks a video-only format, we transparently also
 /// download the best matching audio-only format and mux them with `ffmpeg -c copy`. Same
-/// approach the YouTubeKit fallback path in `DownloadManager.runYouTubeKitFallback` uses.
+/// standard media-format combination used for adaptive downloads.
 /// Audio-only picks don't pair — they download alone.
 ///
 /// **Output location.** Files land at `Documents/<sanitized title>.<ext>`, alongside

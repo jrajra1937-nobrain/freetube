@@ -31,7 +31,7 @@ The mockups use Inter for legible Figma previews. Use the native SF Pro system f
 - Dark mode is the primary presentation; light mode remains a later implementation requirement.
 - Native tab bar, compact thumbnail-led feed, short metadata rows, and a persistent mini-player.
 - Player screen treats streaming availability as conditional and does not imply that every video can be played.
-- Login screen explicitly warns that the upstream cookie-in-WebView approach needs security review.
+- Login screen explains that sign-in is unavailable until an official OAuth flow is implemented.
 - Error state gives a clear retry action without suggesting a restriction bypass.
 
 ## Integration status

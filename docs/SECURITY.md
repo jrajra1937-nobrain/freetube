@@ -36,6 +36,7 @@ References:
 - Account sign-in is disabled in the UI pending a supported official OAuth/API design. Anonymous/public browsing remains available.
 - Signed media URLs and Python/yt-dlp stderr are no longer intentionally emitted to the app logger or stored in a raw diagnostic file. The legacy log-file exporter and sharing UI are disabled; existing files in `Documents/Logs` are cleared on writer initialization.
 - Disabled yt-dlp's TLS certificate-verification bypass in both downloads and metadata probes. Python may now fail closed if the embedded runtime has no trusted CA bundle; verify this on the first device/CI run and add a properly sourced CA bundle if needed.
+- Removed alternate TVHTML5/embed player profiles, `formats=missing_pot`, and direct URL fallback code that the upstream comments explicitly described as exempt from Proof-of-Origin checks. Playback now fails when the standard extraction/player paths do not provide media.
 - Sign-out clears in-memory authentication even when Keychain deletion fails and reports a generic error to the user.
 
 These are source changes and have not yet been compiled or runtime-tested.
@@ -43,7 +44,7 @@ These are source changes and have not yet been compiled or runtime-tested.
 ## Risks and required work
 
 1. Embedded Google password entry/cookie extraction may conflict with Google-supported sign-in expectations and puts high-value session tokens inside an unofficial client. Official OAuth should be evaluated; YouTube Data API OAuth requires a registered client and user consent and does not by itself replace YouTubeKit's private web endpoints or guarantee feature parity.
-2. Complete review of Keychain accessibility class, device-only protection, access group, and sign-out failure recovery. If Keychain deletion fails, the in-memory app is signed out but a saved session may remain for next launch.
+2. Complete review of Keychain accessibility class, device-only protection, access group, and sign-out failure recovery. If Keychain deletion fails, the in-memory app is signed out; the next launch does not apply any legacy cookie, but the stale Keychain item may remain.
 3. Inspect JavaScriptCore bridge inputs and bundled yt-dlp scripts for untrusted-source execution boundaries; do not execute user-provided JavaScript.
 4. Audit HTTP clients for cookie/header scope, redirects, TLS handling, URL redaction and cross-host leakage.
 5. Continue reviewing `os.Logger` interpolation throughout the repository; some existing call sites still include video IDs, titles, local paths, or error descriptions and need privacy minimization.

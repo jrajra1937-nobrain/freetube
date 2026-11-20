@@ -375,15 +375,9 @@ final class PlayerStateManager {
         // bar. Cancelled in `dismiss()` and replaced on each `load`.
         startProgressObservation(for: video.id)
 
-        // Three-tier playback resolution:
-        //   1. `ensureDownloaded` — yt-dlp into local file, then YouTubeKit progressive fallback
-        //      inside it. Returns a `file://` URL on success.
-        //   2. **HLS streaming** — last resort when every download path is blocked (PoT 403s,
-        //      cipher-decode broken, etc.). `AVPlayerItem(url:)` accepts an HLS master-playlist
-        //      URL identically to a file URL — AVFoundation handles segment fetching itself, so
-        //      we get playback without needing to predownload or decode signature ciphers. The
-        //      trade-off is no local file ⇒ the video isn't watchable offline, doesn't appear in
-        //      Downloads, and doesn't burn cache storage. But it plays.
+        // Try a permitted local download first. If that fails, attempt only the standard iOS
+        // player endpoint and use a returned HLS/progressive URL. Do not change player profiles
+        // or token requirements to make a denied stream work.
         let playbackURL: URL
         do {
             loadState = .downloading(progress: 0, phase: nil)
@@ -470,30 +464,13 @@ final class PlayerStateManager {
         }
     }
 
-    /// Last-ditch URL resolver. Walks four tiers, returning the first one that produces a URL
-    /// `AVPlayer` can open directly:
-    ///   1. iOS-client HLS manifest (adaptive bitrate, best playback experience)
-    ///   2. iOS-client progressive MP4 (muxed audio+video, no n-decoding needed)
-    ///   3. TVHTML5 HLS manifest
-    ///   4. TVHTML5 progressive MP4
-    ///
-    /// Why HLS is preferred: HLS chunks use short-lived signatures attached to the manifest
-    /// rather than the player.js-derived `n` cipher, and YouTube doesn't typically PoT-stamp
-    /// HLS the way it does DASH. When HLS isn't exposed (some kids/family content), the iOS
-    /// client's `defaultFormats` still include direct progressive URLs that work without the
-    /// player.js scrape — that's our second tier. Returns nil only when all four tiers fail.
+    /// Uses only the standard iOS player endpoint. If it does not return an authorized playable
+    /// URL, playback fails closed; no alternate client profile is used to avoid access checks.
     private func resolveStreamingURL(videoID: String, quality: VideoQuality) async -> URL? {
         let service = VideoService()
         if let info = try? await service.fetchInfo(id: videoID) {
             if let hls = info.streamingURL { return hls }
             logFormats(videoID: videoID, source: "IOS", formats: info.formats)
-            if let progressive = Self.pickProgressiveURL(from: info.formats, maxHeight: quality.heightCap ?? .max) {
-                return progressive
-            }
-        }
-        if let info = try? await service.fetchInfoViaTVHTML5(id: videoID) {
-            if let hls = info.streamingURL { return hls }
-            logFormats(videoID: videoID, source: "TVHTML5", formats: info.formats)
             if let progressive = Self.pickProgressiveURL(from: info.formats, maxHeight: quality.heightCap ?? .max) {
                 return progressive
             }

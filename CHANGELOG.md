@@ -9,4 +9,5 @@
 - Disabled embedded Google credential and cookie login pending an official OAuth/API path; clear legacy sessions on launch.
 - Improved Keychain error handling and cookie host filtering, removed sensitive request URL logging, disabled raw log exports, and restored TLS certificate verification for yt-dlp.
 - Updated the development branch workflow to run tests on pushes and manual dispatches.
+- Removed alternate player profiles and missing-token format overrides that evaded YouTube Proof-of-Origin checks; playback now fails closed when standard access is unavailable.
 - SwiftUI source remains unchanged pending a successful baseline build.

@@ -89,8 +89,7 @@ public nonisolated func freetube_yt_dlp(
 /// **What's different vs the download path:**
 ///   - No progress hooks, no `parseOptions` — we hand-build the opts dict because we have no
 ///     argv to parse. The opts mirror what `freetube_yt_dlp` sets via parseOptions for the
-///     same set of YouTube extractor args (player_client fallback chain, missing_pot,
-///     certificate validation enabled so probes see the same TLS policy as downloads.
+///     default YouTube extractor policy, with certificate validation enabled.
 ///   - The result is a Python dict. The caller is responsible for extracting Swift-native
 ///     values on the Python thread before returning to the actor system — see
 ///     `YtDlpInfoService` for the canonical conversion pattern.
@@ -134,9 +133,6 @@ public nonisolated func freetube_yt_dlp_extract_info(url: String) async throws -
     // instead of spinning forever. yt-dlp's default is no timeout. The user can wait
     // 30s for an error; they cannot wait 3 minutes for the spinner.
     opts["socket_timeout"] = 30.0
-    opts["extractor_args"] = PythonObject([
-        "youtube": ["player_client=tv_simply,tv_embedded,web_creator,mweb,web_safari,ios,android_vr", "formats=missing_pot"]
-    ] as [String: [String]])
     opts["js_runtimes"] = PythonObject(["deno": ["path": PythonJSBridge.fakeDenoPath]])
     // CLAUDE.md §15.3: yt-dlp's `YoutubeDL.__init__` runs an ffmpeg version probe
     // (`Popen(['ffmpeg', '-bsfs']).communicate()`). On iOS the YoutubeDL-iOS `Pop` class
