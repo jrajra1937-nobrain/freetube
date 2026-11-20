@@ -27,10 +27,6 @@ final class SessionManager {
         log.info("[session] bootstrap: visitor data ensured")
     }
 
-    func signIn(with header: String) async throws {
-        throw SessionManagerError.signInUnavailable
-    }
-
     func signOut() async throws {
         log.info("[session] signOut called")
         var keychainClearFailed = false
@@ -69,14 +65,8 @@ final class SessionManager {
 
 enum SessionManagerError: LocalizedError {
     case couldNotRemoveSavedSession
-    case signInUnavailable
 
     var errorDescription: String? {
-        switch self {
-        case .couldNotRemoveSavedSession:
-            return "FreeTube signed out, but iOS could not remove the saved session. Restart the app and reset the session before using it again."
-        case .signInUnavailable:
-            return "Google sign-in is disabled until an official OAuth flow is available."
-        }
+        "FreeTube signed out, but iOS could not remove the saved session. Restart the app and reset the session before using it again."
     }
 }

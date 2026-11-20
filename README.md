@@ -226,7 +226,7 @@ When yt-dlp's Python side calls `subprocess.Popen.communicate` against ffmpeg, t
 
 ### Account sign-in stays disabled
 
-The old WKWebView cookie-capture implementation is retained only as legacy source and is not wired to the UI. The app clears saved legacy cookies at startup and rejects sign-in. Do not re-enable it; use only a reviewed official OAuth/API approach.
+The upstream WKWebView cookie-capture implementation was removed. The app clears the legacy saved cookie at startup and has no Google sign-in. Any future account flow must use a reviewed official OAuth/API approach.
 
 ### `SubscriptionRegistry` reconciles YouTubeKit's gaps
 

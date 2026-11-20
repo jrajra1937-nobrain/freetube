@@ -4,15 +4,15 @@ Updated: 2026-11-20
 
 ## Overall: 15% (Figma phase validated; security hardening in progress; build unvalidated)
 
-The user-specified weighted milestones are based on completed evidence. Figma is validated at 10%; repository audit is approximately 50% complete (5%). Source-level security hardening contributes no separate weight until the security milestone is fully audited. GitHub Actions run `44774330708` is queued on macOS; no build, test, or IPA result is available yet. No iPhone installation or media validation is claimed.
+The user-specified weighted milestones are based on completed evidence. Figma is validated at 10%; repository audit is approximately 50% complete (5%). Source-level security hardening contributes no separate weight until the security milestone is fully audited. Latest GitHub Actions run `44775691619` is queued on macOS; no build, test, or IPA result is available yet. No iPhone installation or media validation is claimed.
 
 | Milestone | Weight | Status | Evidence |
 |---|---:|---|---|
 | Repository audit | 10% | In progress | Baseline pinned; core project, auth, player, persistence, Xcode config, packages and workflow inspected; complete dependency and runtime audit remains |
-| Original compilation | 15% | Running / queued | GitHub Actions run `44774330708` is queued on `macos-26`; job has not started |
+| Original compilation | 15% | Running / queued | GitHub Actions run `44775691619` is queued on `macos-26`; job has not started |
 | iPhone installation | 15% | Not started | No signed IPA or physical device access |
 | Player validation | 15% | Source only | AVFoundation components found; no iPhone runtime tests |
-| Authentication/security | 10% | In progress | Risky cookie-capture login disabled; Keychain error handling and YouTube cookie scoping hardened; logging minimized; source/runtime audit remains |
+| Authentication/security | 10% | In progress | Embedded cookie-login UI and cookie ingestion removed; legacy Keychain item is cleared at startup; sensitive log export disabled; broader source/runtime audit remains |
 | Design Figma | 10% | Complete | Connected Figma file contains 14 iPhone frames, editable color/layout variables, reusable components, and loading/empty/error/success states |
 | SwiftUI integration | 15% | Not started | Existing UI retained; custom design deferred until baseline compile |
 | Tests and delivery | 10% | Not started | No XCTest target or artifact run |
@@ -25,7 +25,7 @@ The user-specified weighted milestones are based on completed evidence. Figma is
 - Created the Figma design file with 14 iPhone screens, editable variables, reusable components and four UI states.
 - Published audit, documentation, security fixes, and build workflow on `jrajra1937-nobrain/freetube` branch `dev/personal-edition`; latest commit `37e267b0a1290151f4479ce6b79cbb06064712da`.
 - Blocked Google cookie-capture login in the app UI pending official OAuth/API implementation; public-content use stays available.
-- Hardened Keychain write/delete handling and exact YouTube cookie-domain checks; removed several sensitive cookie and signed-URL log paths.
+- Removed cookie ingestion and embedded Google sign-in, retained only legacy Keychain session cleanup, and removed sensitive signed-URL log paths.
 - Disabled raw diagnostic-file export because source logs can contain private identifiers or signed stream URLs; UI explains the limitation.
 - Removed alternate embedded/TV player profiles, missing-token overrides, and direct URL fallback paths that avoided YouTube Proof-of-Origin checks. Content that standard access does not allow now fails closed.
 - Added repository guidance and initial architecture/install/security/Figma/testing/maintenance documentation; verified official AltStore Windows ARM announcement and Apple free Personal Team limits.
@@ -57,11 +57,11 @@ The user-specified weighted milestones are based on completed evidence. Figma is
 ## Test/build results
 
 - `git clone`: completed.
-- `xcodebuild`: unavailable on the Linux workspace. GitHub Actions run `44774330708` was observed queued, with no runner assigned and no steps started; no compile, test, or IPA result is claimed.
+- `xcodebuild`: unavailable on the Linux workspace. GitHub Actions run `44775691619` was observed queued, with no runner assigned and no steps started; no compile, test, or IPA result is claimed.
 - `git diff --check`: pending after the latest edits.
 - TLS verification bypass removed from yt-dlp calls; actual embedded CA availability is unknown until macOS CI/device execution.
 - Source-level scan confirms the custom `formats=missing_pot`, alternate TV player, and direct YouTubeKit fallback symbols are absent from Swift code.
-- Two earlier runs were cancelled by branch updates; the latest push created run `44774330708` and it is queued. Avoid further pushes until it finishes so the concurrency policy does not cancel it.
+- Three earlier runs were cancelled by branch updates; the latest push created run `44775691619` and it is queued. Avoid further pushes until it finishes so the concurrency policy does not cancel it.
 - XCTest target: none present in audited baseline.
 
 ## User actions eventually needed

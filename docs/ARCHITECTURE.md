@@ -15,7 +15,7 @@ The audit describes the state at this fixed commit. It is not a claim that the c
 The project uses an Xcode filesystem-synchronized group for `FreeTube/FreeTube`, so the `App`, `Core`, `Features`, `UI`, assets, localization catalog, and bundled JavaScript/resource files are included by folder membership rather than individual PBXBuildFile entries. `FreeTube/FreeTube/ContentView.swift` remains in the synchronized target alongside `RootView.swift`; confirm the actual app entry point in `FreeTubeApp.swift`.
 
 - `App/`: environment and root routing.
-- `Core/Auth/`: cookie capture, Keychain storage, session state, subscription cache.
+- `Core/Auth/`: legacy session cleanup, authentication state, subscription cache.
 - `Core/Networking/`: YouTubeKit client and service wrappers/mappers.
 - `Core/Player/`: queue, AVPlayer lifecycle, HLS resource loading, lock-screen commands, audio session.
 - `Core/Download/`: yt-dlp, FFmpeg, URL downloads and background task scaffolding.
@@ -32,7 +32,7 @@ No `.github/workflows` or XCTest target existed in the audited upstream tree. Th
 
 ## Features verified in source
 
-- SwiftUI screens exist for home, search/suggestions, subscriptions, account/library/history, channels, playlists, video details/comments, downloads/link fetching, login, and settings.
+- SwiftUI screens exist for home, search/suggestions, subscriptions, account/library/history, channels, playlists, video details/comments, downloads/link fetching, and settings. Account sign-in is not implemented in the Personal Edition.
 - `AVQueuePlayer`, `AVPlayerViewController`, audio session, Now Playing metadata, remote command center, and a playback resolver are implemented in source. Hardware PiP, lock-screen playback, Bluetooth/AirPlay behavior, and interruptions still require device validation.
 - The upstream cookie login code remains in source but is not reachable from the UI. Session bootstrap clears legacy cookies and sign-in is rejected.
 - SwiftData persistence models and background-download coordination are present.
@@ -44,7 +44,7 @@ The README status table must not be read as proof of complete functionality. `IN
 
 The `INTEGRATION.md` setup steps about adding folders and SPM packages are stale relative to the current project: the folders are already in a synchronized group and package references/pins are already in `project.pbxproj` and `Package.resolved`.
 
-The upstream login flow used a WKWebView Google credential form and cookie capture, not official Google OAuth. The UI is disabled, legacy Keychain cookies are cleared at bootstrap, and the session manager rejects sign-in. Official OAuth feasibility depends on supported Google/YouTube APIs and their scopes/quota and is not a drop-in replacement. See `docs/SECURITY.md`.
+The upstream WKWebView credential and cookie-capture sources were removed. Session bootstrap clears the legacy Keychain cookie; account sign-in is absent. Official OAuth feasibility depends on supported Google/YouTube APIs and their scopes/quota and is not a drop-in replacement. See `docs/SECURITY.md`.
 
 The project embeds yt-dlp/FFmpeg and offers downloading. The Personal Edition removes alternate player profiles and missing-token format overrides that avoided YouTube's Proof-of-Origin checks. It uses yt-dlp's default extraction policy and the standard iOS player endpoint. Access failures must be shown as failures; do not add fallback profiles that evade restrictions.
 
