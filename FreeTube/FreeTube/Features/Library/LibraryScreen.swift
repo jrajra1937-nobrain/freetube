@@ -17,7 +17,6 @@ import Kingfisher
 struct LibraryScreen: View {
     @State private var libraryModel = LibraryViewModel()
     @State private var accountModel = AccountViewModel()
-    @State private var showingLogin = false
 
     var body: some View {
         NavigationStack {
@@ -35,18 +34,6 @@ struct LibraryScreen: View {
             .refreshable {
                 await accountModel.load()
                 if accountModel.info != nil { await libraryModel.load() }
-            }
-            .sheet(isPresented: $showingLogin) {
-                LoginScreen()
-                    .onDisappear {
-                        // After the login sheet closes, re-fetch account info — if cookies
-                        // landed, the next `fetchAccountInfo` will return non-nil and the menu
-                        // appears immediately.
-                        Task {
-                            await accountModel.load()
-                            await libraryModel.load()
-                        }
-                    }
             }
             .errorToast(Bindable(libraryModel).errorState)
         }
@@ -83,15 +70,12 @@ struct LibraryScreen: View {
                     .buttonStyle(.bordered)
                 }
             } else {
-                Button {
-                    showingLogin = true
-                } label: {
-                    Label("Sign in to YouTube", systemImage: "person.crop.circle.badge.plus")
-                }
+                Label("Account features unavailable", systemImage: "lock.shield")
+                    .foregroundStyle(.secondary)
             }
         } footer: {
             if accountModel.info == nil {
-                Text("Sign in to access your watch history, playlists, liked videos, and Watch Later.")
+                Text("Google sign-in is disabled until a supported OAuth flow is implemented. Public content remains available without an account.")
             }
         }
     }

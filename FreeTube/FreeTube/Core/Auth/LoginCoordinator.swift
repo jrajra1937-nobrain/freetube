@@ -3,7 +3,8 @@ import Combine
 import WebKit
 import OSLog
 
-/// Drives the `WKWebView`-based login flow per CLAUDE.md §9.
+/// Legacy cookie-login coordinator. The account screen no longer exposes this flow because
+/// embedded Google credential collection is not an approved OAuth mechanism.
 /// - Loads `accounts.google.com`.
 /// - Watches for redirects to `youtube.com` after sign-in.
 /// - Reads cookies from `WKWebsiteDataStore.default().httpCookieStore`.
@@ -46,8 +47,6 @@ final class LoginCoordinator: NSObject, ObservableObject {
         ]
         return components.url!
     }()
-    static let signedInHostFragment = "youtube.com"
-
     /// Fallback URL to load if we detect Google sign-in completed but the redirect to YouTube
     /// didn't happen automatically (some accounts land on `myaccount.google.com` after sign-in).
     /// Loading youtube.com directly causes YouTube's edge to set its session cookies (SAPISID,
@@ -59,15 +58,13 @@ final class LoginCoordinator: NSObject, ObservableObject {
             log.debug("[login] handleNavigation called with nil url")
             return
         }
-        log.info("[login] nav → host=\(url.host ?? "?", privacy: .public) path=\(url.path, privacy: .public)")
-        if url.host?.contains(Self.signedInHostFragment) == true {
-            log.info("[login] reached youtube.com — entering verifying state, will read cookies")
+        guard let host = url.host else { return }
+        if CookieDomainPolicy.isYouTubeHost(host) {
             state = .verifying
             Task { await captureCookies(from: webView) }
             return
         }
         if isPostSignInGoogleURL(url) {
-            log.info("[login] detected post-sign-in Google URL — bouncing to youtube.com to mint YT cookies")
             webView.load(URLRequest(url: Self.youTubeLandingURL))
         }
     }
@@ -93,69 +90,17 @@ final class LoginCoordinator: NSObject, ObservableObject {
         // also re-check on `didFinish` — the coordinator gets both callbacks. To keep this
         // method idempotent, only do the keychain write when we have the full required set.
         let cookies = await webView.configuration.websiteDataStore.httpCookieStore.allCookies()
-        let ytCookies = cookies.filter { $0.domain.hasSuffix("youtube.com") || $0.domain.hasSuffix(".google.com") }
-        let presentNames = Set(ytCookies.map(\.name))
-        let missing = CookieStore.requiredCookieNames.subtracting(presentNames).sorted().joined(separator: ",")
-
-        // Count duplicates so we can confirm the dedup logic in CookieStore is actually firing.
-        let byName = Dictionary(grouping: ytCookies, by: \.name)
-        let duplicateNames = byName.filter { $0.value.count > 1 }
-        let duplicateSummary = duplicateNames
-            .map { "\($0.key)×\($0.value.count)" }
-            .sorted()
-            .joined(separator: ",")
-        let domainSet = Set(ytCookies.map(\.domain)).sorted().joined(separator: ",")
-
-        log.info("[login] captureCookies: total=\(cookies.count, privacy: .public) ytScoped=\(ytCookies.count, privacy: .public) presentRequired=\(CookieStore.requiredCookieNames.intersection(presentNames).count, privacy: .public)/\(CookieStore.requiredCookieNames.count, privacy: .public) missing=[\(missing, privacy: .public)] uniqueNames=\(byName.count, privacy: .public)")
-        log.info("[login] captureCookies domains: [\(domainSet, privacy: .public)]")
-        if !duplicateNames.isEmpty {
-            log.info("[login] captureCookies duplicates (will be deduped): [\(duplicateSummary, privacy: .public)]")
-        } else {
-            log.info("[login] captureCookies: no duplicate names — single-domain capture")
-        }
-
-        // Full per-cookie dump — name, domain, path, secure/httpOnly flags, value length.
-        // **Cookie values are never logged** (CLAUDE.md §5: cookies are sensitive, value bytes
-        // must not touch logs). The length is safe and helps us tell empty / placeholder
-        // cookies from real session ones.
-        let sorted = cookies.sorted { ($0.domain, $0.name) < ($1.domain, $1.name) }
-        log.info("[login] === full cookie inventory (\(sorted.count, privacy: .public)) ===")
-        for c in sorted {
-            let flags: [String] = [
-                c.isSecure ? "secure" : nil,
-                c.isHTTPOnly ? "httpOnly" : nil,
-                c.isSessionOnly ? "session" : nil
-            ].compactMap { $0 }
-            let flagText = flags.isEmpty ? "" : " flags=[\(flags.joined(separator: ","))]"
-            let scope = c.domain.hasSuffix("youtube.com")
-                ? "[yt]"
-                : (c.domain.hasSuffix("google.com") ? "[g]" : "[other]")
-            log.info("[login] cookie \(scope, privacy: .public) name=\(c.name, privacy: .public) domain=\(c.domain, privacy: .public) path=\(c.path, privacy: .public) valueLen=\(c.value.count, privacy: .public)\(flagText, privacy: .public)")
-        }
-        log.info("[login] === end cookie inventory ===")
-
         guard let header = CookieStore.shared.makeHeader(from: cookies) else {
-            log.notice("[login] required cookie set incomplete — staying in verifying, waiting for next navigation callback")
             // Stay in `.verifying` so the next navigation callback gets another shot — don't
             // flip to `.failed` here. The user can still tap Cancel to abort.
             return
         }
-        log.info("[login] required cookies present, signing in (header length=\(header.count, privacy: .public))")
-        await session.signIn(with: header)
-        state = .succeeded
-        log.info("[login] sign-in succeeded — state=.succeeded")
-    }
-
-    /// Wipe WKWebView data store at sign-out time (called from `AccountViewModel.signOut`).
-    static func clearWebData() async {
-        let types: Set<String> = [
-            WKWebsiteDataTypeCookies,
-            WKWebsiteDataTypeLocalStorage,
-            WKWebsiteDataTypeSessionStorage,
-            WKWebsiteDataTypeIndexedDBDatabases,
-            WKWebsiteDataTypeWebSQLDatabases
-        ]
-        await WKWebsiteDataStore.default()
-            .removeData(ofTypes: types, modifiedSince: .distantPast)
+        do {
+            try await session.signIn(with: header)
+            state = .succeeded
+        } catch {
+            log.error("[login] secure session persistence failed")
+            state = .failed("The session could not be stored securely. Sign-in was cancelled.")
+        }
     }
 }

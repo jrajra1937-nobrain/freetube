@@ -16,30 +16,29 @@ final class SessionManager {
 
     /// Call exactly once during `FreeTubeApp.init` or `RootView.onAppear`.
     func bootstrap() async {
-        if let header = store.loadHeader(), !header.isEmpty {
-            client.applyCookies(header)
-            AuthState.shared.status = .loggedIn(displayName: nil)
-            log.info("[session] bootstrap: header found in keychain (length=\(header.count, privacy: .public)) → applied to client, status=.loggedIn")
-        } else {
-            AuthState.shared.status = .loggedOut
-            log.info("[session] bootstrap: no cookies on disk — status=.loggedOut")
-        }
+        // Do not silently reuse legacy cookie-capture sessions. Account sign-in stays
+        // disabled until a supported OAuth/API path replaces this mechanism.
+        try? store.clear()
+        client.applyCookies("")
+        AuthState.shared.status = .loggedOut
+        log.info("[session] anonymous bootstrap")
         // Visitor data is needed even for anonymous video requests. See YouTubeKitClient.ensureVisitorData().
         await client.ensureVisitorData()
         log.info("[session] bootstrap: visitor data ensured")
     }
 
-    func signIn(with header: String) async {
-        log.info("[session] signIn called — header length=\(header.count, privacy: .public)")
-        store.storeHeader(header)
-        client.applyCookies(header)
-        AuthState.shared.status = .loggedIn(displayName: nil)
-        log.info("[session] signIn complete → status=.loggedIn")
+    func signIn(with header: String) async throws {
+        throw SessionManagerError.signInUnavailable
     }
 
-    func signOut() async {
+    func signOut() async throws {
         log.info("[session] signOut called")
-        store.clear()
+        var keychainClearFailed = false
+        do {
+            try store.clear()
+        } catch {
+            keychainClearFailed = true
+        }
         client.applyCookies("")
         // Drop the visitor token too — if cookies were stale, the token they were paired with may
         // also be invalid. `ensureVisitorData` below seeds a fresh one for the anonymous session.
@@ -49,12 +48,35 @@ final class SessionManager {
         // account's channels marked as "subscribed".
         SubscriptionRegistry.shared.clear()
         AuthState.shared.status = .loggedOut
-        log.info("[session] signOut complete → status=.loggedOut")
+        log.info("[session] in-memory sign-out completed")
+        if keychainClearFailed {
+            throw SessionManagerError.couldNotRemoveSavedSession
+        }
     }
 
     /// Called by error-handling layer when 401-equivalent or `cookieExpired` is observed.
     func handleExpiredSession() async {
         log.error("[session] expired — clearing cookies and routing to login")
-        await signOut()
+        do {
+            try await signOut()
+        } catch {
+            // The in-memory session is already cleared; keep the failure generic and
+            // avoid exposing Keychain details in logs.
+            log.error("[session] saved session cleanup failed")
+        }
+    }
+}
+
+enum SessionManagerError: LocalizedError {
+    case couldNotRemoveSavedSession
+    case signInUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .couldNotRemoveSavedSession:
+            return "FreeTube signed out, but iOS could not remove the saved session. Restart the app and reset the session before using it again."
+        case .signInUnavailable:
+            return "Google sign-in is disabled until an official OAuth flow is available."
+        }
     }
 }

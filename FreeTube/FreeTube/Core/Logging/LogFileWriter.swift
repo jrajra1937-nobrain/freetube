@@ -47,26 +47,20 @@ final class LogFileWriter {
     nonisolated static let flushInterval: Duration = .seconds(5)
 
     private init() {
-        // Read the persisted flag synchronously so the writer starts immediately on first
-        // launch if the user had it enabled previously.
-        isEnabled = UserPreferences().logToFile
-        if isEnabled {
-            start()
-        }
+        // Raw OSLog mirroring can expose account identifiers and signed media URLs.
+        // Disable the legacy exporter and remove its persisted preference.
+        isEnabled = false
+        UserPreferences().logToFile = false
+        for url in Self.allLogFiles() { try? FileManager.default.removeItem(at: url) }
     }
 
     // MARK: - Public
 
     /// Toggle file logging on or off. Persists the flag and starts/stops the writer.
     func setEnabled(_ enabled: Bool) {
-        guard enabled != isEnabled else { return }
-        isEnabled = enabled
-        preferences.logToFile = enabled
-        if enabled {
-            start()
-        } else {
-            stop()
-        }
+        // File export remains disabled until a redacted diagnostic format is implemented.
+        preferences.logToFile = false
+        isEnabled = false
     }
 
     /// All log files in `Documents/Logs/`, newest first by filename (which sorts

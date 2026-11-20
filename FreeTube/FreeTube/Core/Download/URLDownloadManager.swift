@@ -188,7 +188,7 @@ final class URLDownloadManager {
             jobs[url] = nil
             return
         }
-        log.info("[fetch] cancel requested for url=\(url, privacy: .public)")
+        log.info("[fetch] cancel requested")
         task.cancel()
         // Don't remove the job entry — the observer Task will land in the `is CancellationError`
         // branch above and write a terminal `.failed("Cancelled")` state, which the UI uses

@@ -44,7 +44,7 @@ The README status table must not be read as proof of complete functionality. `IN
 
 The `INTEGRATION.md` setup steps about adding folders and SPM packages are stale relative to the current project: the folders are already in a synchronized group and package references/pins are already in `project.pbxproj` and `Package.resolved`.
 
-The login flow is a first-party WKWebView Google credential form/cookie-capture approach, not official Google OAuth. Embedded user-agent sign-in creates security and account-policy risk. Do not use a primary Google account until `docs/SECURITY.md` review is complete; official OAuth feasibility depends on supported Google/YouTube APIs and their scopes/quota and is not a drop-in replacement.
+The upstream login flow used a WKWebView Google credential form and cookie capture, not official Google OAuth. The UI is disabled, legacy Keychain cookies are cleared at bootstrap, and the session manager rejects sign-in. Official OAuth feasibility depends on supported Google/YouTube APIs and their scopes/quota and is not a drop-in replacement. See `docs/SECURITY.md`.
 
 The project embeds yt-dlp/FFmpeg and offers downloading. That does not guarantee permission to download or play any particular content. Do not describe it as a restriction bypass.
 

@@ -33,8 +33,12 @@ final class AccountViewModel {
     }
 
     func signOut() async {
-        await session.signOut()
-        await LoginCoordinator.clearWebData()
-        info = nil
+        do {
+            try await session.signOut()
+            info = nil
+        } catch {
+            info = nil
+            errorState = ErrorState(from: error)
+        }
     }
 }

@@ -4,7 +4,6 @@ import Kingfisher
 @available(iOS 17.0, *)
 struct AccountScreen: View {
     @State private var model = AccountViewModel()
-    @State private var showingLogin = false
 
     var body: some View {
         NavigationStack {
@@ -38,13 +37,10 @@ struct AccountScreen: View {
                     }
                 } else {
                     Section {
-                        Button {
-                            showingLogin = true
-                        } label: {
-                            Label("Sign in to YouTube", systemImage: "person.crop.circle.badge.plus")
-                        }
+                        Label("Google sign-in is unavailable", systemImage: "lock.shield")
+                            .foregroundStyle(.secondary)
                     } footer: {
-                        Text("FreeTube uses a `WKWebView` to capture cookies. They are stored only in the Keychain.")
+                        Text("The existing sign-in embeds Google authentication in a web view and captures session cookies. This is not official Google OAuth, so account sign-in is disabled until a supported, policy-compliant flow is available. You can still use public content without signing in.")
                     }
                 }
 
@@ -68,10 +64,6 @@ struct AccountScreen: View {
             }
             .navigationTitle("Account")
             .task { await model.load() }
-            .sheet(isPresented: $showingLogin) {
-                LoginScreen()
-                    .onDisappear { Task { await model.load() } }
-            }
             .errorToast(Bindable(model).errorState)
         }
     }

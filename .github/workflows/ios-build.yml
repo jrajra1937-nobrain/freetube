@@ -52,7 +52,7 @@ jobs:
             2>&1 | tee build-logs/resolve-packages.log
 
       - name: Run tests when a test target exists
-        if: ${{ inputs.run_tests }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}
         run: |
           set -o pipefail
           if grep -q 'product-type.unit-test' FreeTube/FreeTube.xcodeproj/project.pbxproj; then

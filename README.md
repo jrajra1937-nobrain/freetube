@@ -1,6 +1,6 @@
 # FreeTube
 
-A native SwiftUI YouTube client for iOS. Cookie-based auth, AVPlayer playback, offline downloads, no Google API key.
+A native SwiftUI YouTube client for iOS. Public browsing, AVPlayer playback, and local downloads are being prepared for a personal iPhone build. Google sign-in is disabled until an official OAuth/API flow is implemented and audited.
 
 For personal use, sideload, or TestFlight only — **not** for public App Store submission.
 
@@ -89,7 +89,7 @@ If you do not agree with these terms, do not install or use this software.
 | Area | Status |
 |---|---|
 | Home / Search / Video detail | ✓ |
-| Login (Google cookies via WKWebView) | ✓ |
+| Google account login | Disabled pending official OAuth/API implementation |
 | Subscriptions / Library / History | ✓ |
 | Channel screen / Playlist screen | ✓ |
 | Like / dislike / save-to-playlist | ✓ |
@@ -121,7 +121,7 @@ The account login approach and unfinished service methods are under review. Read
 
 - Xcode 15 or later
 - iOS 17.0 or later (real device recommended — Python / yt-dlp work, but Simulator can be flaky for ffmpeg-heavy paths)
-- A Google account (or family-managed account); login is performed inside the app via a WebView
+- A Google account is not required for public content. Account features remain unavailable while sign-in is disabled.
 
 ---
 

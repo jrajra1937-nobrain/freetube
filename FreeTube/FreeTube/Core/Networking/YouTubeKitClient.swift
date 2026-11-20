@@ -80,13 +80,7 @@ nonisolated final class YouTubeKitClient: @unchecked Sendable {
         tvHtmlModel.cookies = cookies
         tvHtmlModel.alwaysUseCookies = !cookies.isEmpty
 
-        // Sanity-log the auth state. We never log cookie values themselves — only presence /
-        // length — and we ask the model to compute SAPISIDHASH (without keeping the value) to
-        // confirm YouTubeKit's auth-header generator agrees that the cookie set is usable.
-        let hashOK = !cookies.isEmpty && model.generateSAPISIDHASHForCookies(cookies) != nil
-        let containsSAPISID = cookies.range(of: "SAPISID=") != nil
-        let containsSID = cookies.range(of: "; SID=") != nil || cookies.hasPrefix("SID=")
-        log.info("[client] applyCookies length=\(cookies.count, privacy: .public) state=\(cookies.isEmpty ? "anon" : "auth", privacy: .public) alwaysUseCookies=\(self.model.alwaysUseCookies, privacy: .public) hasSAPISID=\(containsSAPISID, privacy: .public) hasSID=\(containsSID, privacy: .public) sapisidHashGenerable=\(hashOK, privacy: .public)")
+        log.info("[client] authentication state updated")
     }
 
     /// `VideoInfosResponse` requires a `visitorData` token. YouTubeKit doesn't fetch one for you;

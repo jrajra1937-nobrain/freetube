@@ -400,7 +400,7 @@ final class PlayerStateManager {
         } catch {
             log.error("resolveAndPlay: download path FAILED for \(video.id, privacy: .public): \(String(describing: error), privacy: .public) — trying remote stream")
             if let streamURL = await resolveStreamingURL(videoID: video.id, quality: preferences.preferredQuality) {
-                log.info("resolveAndPlay: streaming \(streamURL.absoluteString, privacy: .public)")
+                log.info("resolveAndPlay: using remote stream")
                 playbackURL = streamURL
             } else {
                 log.error("resolveAndPlay: streaming fallback also unavailable for \(video.id, privacy: .public)")

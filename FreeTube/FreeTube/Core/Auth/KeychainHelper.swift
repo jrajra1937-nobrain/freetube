@@ -8,15 +8,30 @@ enum KeychainHelper {
     static let service = "com.leshko.freetube"
 
     static func set(_ data: Data, for key: String) throws {
-        var query: [String: Any] = [
+        let identity: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key
         ]
-        SecItemDelete(query as CFDictionary)
-        query[kSecValueData as String] = data
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let status = SecItemAdd(query as CFDictionary, nil)
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+
+        let updateStatus = SecItemUpdate(identity as CFDictionary, attributes as CFDictionary)
+        let status: OSStatus
+        if updateStatus == errSecItemNotFound {
+            var addQuery = identity
+            for (key, value) in attributes {
+                addQuery[key] = value
+            }
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            status = addStatus == errSecDuplicateItem
+                ? SecItemUpdate(identity as CFDictionary, attributes as CFDictionary)
+                : addStatus
+        } else {
+            status = updateStatus
+        }
         guard status == errSecSuccess else { throw KeychainError.osStatus(status) }
     }
 
@@ -44,13 +59,16 @@ enum KeychainHelper {
         return String(data: data, encoding: .utf8)
     }
 
-    static func delete(_ key: String) {
+    static func delete(_ key: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key
         ]
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.osStatus(status)
+        }
     }
 }
 

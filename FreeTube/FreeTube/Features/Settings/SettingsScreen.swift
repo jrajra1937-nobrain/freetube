@@ -10,17 +10,6 @@ struct SettingsScreen: View {
     /// the cache eviction sweep deletes files.
     @State private var downloads = DownloadsStore.shared
 
-    /// Observed so the "Save logs to file" section re-renders when the writer opens / closes
-    /// the current log file.
-    @State private var logWriter = LogFileWriter.shared
-
-    /// Wraps a single URL for the Share sheet. Optional because the sheet only presents when
-    /// the user taps "Share latest log" AND there's a file to share. `nil` → sheet not shown.
-    @State private var shareLogURL: URL?
-
-    /// "Are you sure?" confirmation for the destructive Clear-all-logs button.
-    @State private var showingClearLogsConfirmation = false
-
     private var currentCacheBytes: Int64 {
         downloads.entries.reduce(0) { $0 + $1.fileSize }
     }
@@ -116,43 +105,11 @@ struct SettingsScreen: View {
                     Text("yt-dlp is the engine that resolves YouTube stream URLs. FreeTube auto-refreshes it every 7 days from the official GitHub release. Tap Update now if a video stops playing — newer versions often fix breakage caused by YouTube's API changes.")
                 }
 
-                Section {
-                    Toggle("Save logs to file", isOn: Bindable(model).logToFile)
-                    if model.logToFile, let url = logWriter.currentLogFileURL {
-                        LabeledContent("Current log") {
-                            Text(url.lastPathComponent)
-                                .font(.caption.monospaced())
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    }
-                    Button {
-                        // Prefer the active file; fall back to the latest historical one
-                        // so the Share button still works right after the toggle is flipped
-                        // off (writer closes the file, currentLogFileURL goes nil, but the
-                        // file is still on disk and shareable).
-                        shareLogURL = logWriter.currentLogFileURL ?? LogFileWriter.allLogFiles().first
-                    } label: {
-                        Label("Share latest log…", systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(LogFileWriter.allLogFiles().isEmpty)
-                    if MacIntegration.isRunningOnMac {
-                        Button {
-                            MacIntegration.revealInFinder(LogFileWriter.logsDirectory())
-                        } label: {
-                            Label("Show log folder", systemImage: "folder")
-                        }
-                    }
-                    Button(role: .destructive) {
-                        showingClearLogsConfirmation = true
-                    } label: {
-                        Label("Clear all logs", systemImage: "trash")
-                    }
-                    .disabled(LogFileWriter.allLogFiles().isEmpty)
-                } header: {
-                    Text("Diagnostics")
+                Section("Diagnostics") {
+                    Label("Anonymized diagnostic export is not available yet.", systemImage: "lock.shield")
+                        .foregroundStyle(.secondary)
                 } footer: {
-                    Text("When enabled, every app launch creates a new log file under Documents/Logs/ (visible in the Files app). Each file starts with the app version, build, iOS version, and device model, followed by timestamped entries from FreeTube's subsystem. Useful for sharing diagnostics with the developer when something breaks in TestFlight or sideload installs.")
+                    Text("Raw logs can contain account identifiers and temporary media URLs. Local file export is disabled until diagnostics are safely redacted.")
                 }
 
                 Section {
@@ -188,30 +145,6 @@ struct SettingsScreen: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This signs you out and clears cached cookies.")
-            }
-            // System Share sheet for the log file. `ShareLink` would be cleaner, but
-            // file:// URLs inside SwiftUI's `ShareLink` sometimes serialize as plain text
-            // — UIActivityViewController via the existing `ActivityShareSheet` is the
-            // reliable path for picking "Save to Files", AirDrop, Mail, etc.
-            .sheet(isPresented: Binding(
-                get: { shareLogURL != nil },
-                set: { if !$0 { shareLogURL = nil } }
-            )) {
-                if let url = shareLogURL {
-                    ActivityShareSheet(activityItems: [url])
-                }
-            }
-            .confirmationDialog(
-                "Delete all log files?",
-                isPresented: $showingClearLogsConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    model.clearLogFiles()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This removes every file under Documents/Logs/. If \"Save logs to file\" is on, a fresh log file will be opened for new entries.")
             }
         }
     }

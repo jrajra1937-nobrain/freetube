@@ -163,7 +163,7 @@ final class FetchViewModel {
     // MARK: - Internals
 
     private func probe(url: String) {
-        log.info("[FetchVM] probe() called for url=\(url, privacy: .public); cancelling prior task if any")
+        log.info("[FetchVM] probe started; cancelling prior task if any")
         // Cancel any in-flight probe — only the most recent submission matters. The
         // PythonRunner queue itself can't be preempted (CLAUDE.md §15.1), so an old probe
         // will still run on the Python thread to completion; we just discard its result.

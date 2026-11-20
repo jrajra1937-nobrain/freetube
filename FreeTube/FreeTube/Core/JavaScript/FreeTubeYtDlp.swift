@@ -90,7 +90,7 @@ public nonisolated func freetube_yt_dlp(
 ///   - No progress hooks, no `parseOptions` — we hand-build the opts dict because we have no
 ///     argv to parse. The opts mirror what `freetube_yt_dlp` sets via parseOptions for the
 ///     same set of YouTube extractor args (player_client fallback chain, missing_pot,
-///     no-check-certificates) so the probe sees the same formats the downloader would.
+///     certificate validation enabled so probes see the same TLS policy as downloads.
 ///   - The result is a Python dict. The caller is responsible for extracting Swift-native
 ///     values on the Python thread before returning to the actor system — see
 ///     `YtDlpInfoService` for the canonical conversion pattern.
@@ -102,7 +102,6 @@ public nonisolated func freetube_yt_dlp(
 @available(iOS 17.0, *)
 public nonisolated func freetube_yt_dlp_extract_info(url: String) async throws -> PythonObject {
     let bridgeLog = AppLog(subsystem: "com.leshko.freetube", category: "FreeTubeYtDlp")
-    let ytdlpLog = AppLog(subsystem: "com.leshko.freetube", category: "ytdlp")
 
     bridgeLog.info("extract_info: about to await YtDlp() init")
     let ytdlp = try await YtDlp()
@@ -110,7 +109,7 @@ public nonisolated func freetube_yt_dlp_extract_info(url: String) async throws -
     PythonJSBridge.install()
     bridgeLog.info("extract_info: JS bridge install complete; configuring ydl_opts")
 
-    // -------- Stderr redirection (NO Swift logger callback) --------
+    // -------- Discard Python stderr (may contain signed URLs or account data) --------
     //
     // Build 13 (with `makeLogger(_:)` Swift closure wired into ydl_opts.logger) hung at
     // `YoutubeDL(opts)` init the moment yt-dlp emitted its first verbose line. The cause:
@@ -119,67 +118,18 @@ public nonisolated func freetube_yt_dlp_extract_info(url: String) async throws -
     // **our app-target `SWIFT_OPTIMIZATION_LEVEL = -Onone` doesn't apply to SPM deps**.
     // Under that combination the Python→Swift closure trampoline stalls.
     //
-    // Workaround: don't cross the Python↔Swift boundary at all for log capture. Redirect
-    // Python's `sys.stderr` to a file inside our Logs directory, then tail that file from
-    // a Swift Task and forward new lines into `os.Logger`. Pure CPython on the Python
-    // side; pure Foundation FileHandle on the Swift side; no closure callbacks.
-    let logsDir = LogFileWriter.logsDirectory()
-    try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
-    let stderrPath = logsDir.appendingPathComponent("ytdlp-stderr.log").path
-    try? FileManager.default.removeItem(atPath: stderrPath)
-    FileManager.default.createFile(atPath: stderrPath, contents: nil)
-
+    // Workaround: don't cross the Python↔Swift boundary for log capture. Discard stderr
+    // instead of persisting yt-dlp output, which can include signed media URLs.
     let sys = try Python.attemptImport("sys")
     let builtinsModule = try Python.attemptImport("builtins")
-    // `buffering=1` = line-buffered. Each `\n` from Python flushes to the file
-    // immediately, so the tail task sees lines as soon as yt-dlp emits them.
-    sys.stderr = builtinsModule.open(stderrPath, "w", 1)
+    sys.stderr = builtinsModule.open("/dev/null", "w")
     sys.stdout = sys.stderr
-    bridgeLog.info("extract_info: Python stdout/stderr redirected to \(stderrPath, privacy: .public)")
-
-    // Tail task — reads the stderr file every second, emits each new line into the
-    // `ytdlp` os.Logger category. `LogFileWriter` picks them up because they share the
-    // same `subsystem == com.leshko.freetube` predicate. Detached + `.utility` so the
-    // poll never competes with the Python interpreter for the calling cooperative-pool
-    // worker thread.
-    let tailTask = Task.detached(priority: .utility) {
-        // Open the FileHandle inside the task so its `FileHandle` reference doesn't
-        // need to cross the Sendable boundary — `FileHandle` isn't `Sendable`.
-        guard let handle = try? FileHandle(forReadingAtPath: stderrPath) else { return }
-        defer { try? handle.close() }
-        var carry = ""
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(1))
-            let data = handle.availableData
-            if data.isEmpty { continue }
-            guard let chunk = String(data: data, encoding: .utf8) else { continue }
-            let combined = carry + chunk
-            // Hold back any trailing partial line so we don't split a log line at a
-            // poll boundary; emit it on the next pass when the newline arrives.
-            let lastNewline = combined.lastIndex(of: "\n")
-            let emit: Substring
-            if let lastNewline {
-                emit = combined[..<lastNewline]
-                carry = String(combined[combined.index(after: lastNewline)...])
-            } else {
-                emit = combined[...]
-                carry = ""
-                continue
-            }
-            for line in emit.split(separator: "\n") {
-                ytdlpLog.info("\(String(line), privacy: .public)")
-            }
-        }
-    }
 
     var opts = PythonObject([:] as [String: PythonObject])
-    // Verbose so we see every extractor step in the redirected stderr. Removing
-    // `quiet`/`no_warnings` overrides the defaults.
-    opts["verbose"] = true
-    opts["quiet"] = false
-    opts["no_warnings"] = false
+    opts["quiet"] = true
+    opts["no_warnings"] = true
     opts["noplaylist"] = true
-    opts["nocheckcertificate"] = true
+    opts["nocheckcertificate"] = false
     // Socket / HTTP timeout so a hung network leg throws a Python exception after ~30s
     // instead of spinning forever. yt-dlp's default is no timeout. The user can wait
     // 30s for an error; they cannot wait 3 minutes for the spinner.
@@ -198,16 +148,12 @@ public nonisolated func freetube_yt_dlp_extract_info(url: String) async throws -
     // as the last entry before the 4+ minute spin.
     opts["ffmpeg_location"] = PythonObject("/dev/null/no-ffmpeg")
 
-    bridgeLog.info("extract_info: importing yt_dlp module via Python.attemptImport")
+    bridgeLog.info("extract_info: importing yt_dlp module")
     let yt_dlp_module = try Python.attemptImport("yt_dlp")
-    bridgeLog.info("extract_info: yt_dlp imported, instantiating YoutubeDL (verbose, stderr→file)")
+    bridgeLog.info("extract_info: yt_dlp imported, instantiating YoutubeDL")
     let ydl = yt_dlp_module.YoutubeDL(opts)
     bridgeLog.info("extract_info: YoutubeDL instantiated, calling extract_info(url, download=False)")
 
-    defer {
-        tailTask.cancel()
-        bridgeLog.info("extract_info: tail task cancelled")
-    }
     let result = try ydl.extract_info.throwing.dynamicallyCall(withArguments: [url, false])
     bridgeLog.info("extract_info: extract_info call returned, handing back to caller")
     return result

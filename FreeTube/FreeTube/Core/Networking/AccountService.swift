@@ -43,7 +43,6 @@ final class AccountService: AccountServicing {
     }
 
     func fetchAccountInfo() async throws -> AccountInfo {
-        log.info("[account] fetchAccountInfo — model.cookies length=\(self.client.model.cookies.count, privacy: .public) alwaysUseCookies=\(self.client.model.alwaysUseCookies, privacy: .public)")
         let response: AccountInfosResponse
         do {
             response = try await AccountInfosResponse.sendThrowingRequest(
@@ -55,10 +54,10 @@ final class AccountService: AccountServicing {
             throw YouTubeServiceError.network(error)
         }
         guard !response.isDisconnected else {
-            log.notice("[account] AccountInfosResponse isDisconnected=true (YouTube says logged out) — has name=\(response.name != nil, privacy: .public) handle=\(response.channelHandle != nil, privacy: .public)")
+            log.notice("[account] account response is not authenticated")
             throw YouTubeServiceError.notAuthenticated
         }
-        log.info("[account] AccountInfosResponse OK: name=\(response.name ?? "?", privacy: .public) handle=\(response.channelHandle ?? "?", privacy: .public)")
+        log.info("[account] account information loaded")
         return AccountInfo(
             displayName: response.name ?? "",
             handle: response.channelHandle,
@@ -106,7 +105,7 @@ final class AccountService: AccountServicing {
         let historyCount = Mappers.parseAbbreviatedCount(response.history?.videoCount) ?? (history.isEmpty ? nil : history.count)
         // Trace the raw → parsed mapping so we can debug "— shown instead of count" reports
         // without round-tripping through a debugger.
-        log.info("[account] library counts — likes raw=\"\(response.likes?.videoCount ?? "nil", privacy: .public)\" preview=\(liked.count, privacy: .public) → \(likedCount.map(String.init) ?? "nil", privacy: .public), watchLater raw=\"\(response.watchLater?.videoCount ?? "nil", privacy: .public)\" preview=\(later.count, privacy: .public) → \(watchLaterCount.map(String.init) ?? "nil", privacy: .public), history raw=\"\(response.history?.videoCount ?? "nil", privacy: .public)\" preview=\(history.count, privacy: .public) → \(historyCount.map(String.init) ?? "nil", privacy: .public)")
+        log.info("[account] account library loaded")
         // Pull the user's channel ID off any owned playlist. Every playlist in
         // `AccountLibraryResponse.playlists` is owned by the signed-in user.
         let userChannelID = response.playlists.compactMap { $0.channel?.channelId }.first

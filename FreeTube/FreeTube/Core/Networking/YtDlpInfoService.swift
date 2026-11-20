@@ -18,7 +18,7 @@ final class YtDlpInfoService: Sendable {
     private let log = AppLog(subsystem: "com.leshko.freetube", category: "YtDlpInfoService")
 
     func probe(url: String) async throws -> RemoteMedia {
-        log.info("[probe] start url=\(url, privacy: .public)")
+        log.info("[probe] started")
         let startedAt = Date()
         do {
             log.info("[probe] calling PythonRunner.runIsolated…")
