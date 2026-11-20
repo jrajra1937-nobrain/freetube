@@ -13,7 +13,7 @@ git diff --stat HEAD...origin/main
 git diff --find-renames HEAD...origin/main
 ```
 
-After manually resolving and reviewing the diff, run the manual iOS workflow, inspect artifact logs, and merge only when the build is green and the changes are understood. Retain the known-good commit and revert with a normal reviewed revert commit if a regression appears.
+Review the upstream diff before merging anything. Push only reviewed code to `dev/personal-edition`; its CI build runs automatically. Inspect build logs/artifacts before promoting any change to the fork's default branch. Retain the known-good commit and use a reviewed revert commit if a regression appears.
 
 ## Dependency policy
 
@@ -21,4 +21,4 @@ Preserve `Package.resolved` in source control. Review package release notes and 
 
 ## Scheduled checks
 
-There is no automatic upstream polling workflow. This avoids spending Actions minutes unexpectedly and avoids merging changes without review. Upstream comparison is currently a manual operation.
+There is no automatic upstream polling workflow. Upstream comparison is currently a manual operation so updates are not merged without review. Standard macOS runners are free on public repositories; this workflow runs only for pushes to the development branch or an explicit manual dispatch.

@@ -8,7 +8,7 @@ As of 2026-11-20, AltStore announced official Windows on ARM support in AltServe
 
 ## Expected flow after a successful CI build
 
-1. Use a personal fork or repository branch that contains the workflow; manually run **iOS build (manual)** and download the artifact.
+1. Push to `dev/personal-edition` to start the build, or use **Actions → iOS build → Run workflow** when the workflow is available in the default branch. The workflow uploads an unsigned IPA and build logs.
 2. On Windows ARM64, install the current official AltServer 1.8 or later and AltStore Classic from the official project source. AltStore announced ARM support on 2026-09-14. Follow its Windows setup guide, which asks for iTunes and iCloud from Apple (not Microsoft Store) and device trust/Wi-Fi sync. Confirm Apple driver installation and iPhone detection on this Snapdragon PC before continuing.
 3. Sign the IPA using a legitimate free Apple ID workflow supported by the chosen sideload tool. Never upload Apple credentials or signing certificates to this repository or CI.
 4. Install AltStore on iPhone using its official Windows process, then install the signed app from AltStore.

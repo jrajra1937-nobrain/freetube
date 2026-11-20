@@ -1,6 +1,9 @@
-name: iOS build (manual)
+name: iOS build
 
 on:
+  push:
+    branches:
+      - dev/personal-edition
   workflow_dispatch:
     inputs:
       run_tests:

@@ -21,14 +21,14 @@ The user-specified weighted milestones are based on completed evidence. The Figm
 
 - Cloned the upstream repository and fixed reference at `8fc6d3b7be9571e3ffcb179de3d1de2dfe7012e7`.
 - Inspected README, CLAUDE.md, LICENSE, integration guide, Xcode project, package lockfile, source tree, authentication/player entry points, and unfinished methods/TODOs; checked upstream issue tracker, dated dependency pins, and official Google OAuth/Data API documentation.
-- Added a manually dispatched GitHub Actions workflow for package resolution, conditional tests, simulator/device builds, unsigned IPA packaging and log artifacts.
+- Added a GitHub Actions workflow for package resolution, conditional tests, simulator/device builds, unsigned IPA packaging and log artifacts. It supports manual dispatch and runs on pushes to `dev/personal-edition`.
 - Created the Figma design file with 14 iPhone screens, editable variables, reusable components and four UI states.
 - Published the audit, documentation and manual build workflow to `jrajra1937-nobrain/freetube` on `dev/personal-edition`; verified the remote branch and workflow file.
 - Added repository guidance and initial architecture/install/security/Figma/testing/maintenance documentation; verified official AltStore Windows ARM announcement and Apple free Personal Team limits.
 
 ## Outstanding
 
-- Make the workflow available from the repository default branch (GitHub requires a `workflow_dispatch` workflow there before it can be run against a development branch), then manually dispatch it; current workspace has no Xcode.
+- Wait for the first CI run after the workflow update and resolve any actual dependency or compile failures it reports; current workspace has no Xcode.
 - Integrate Figma components into SwiftUI only after the baseline build is confirmed.
 - Complete source-level audit of all code and package/license/security/update concerns.
 - Resolve compile failures found by CI before any visual redesign.
@@ -58,5 +58,5 @@ The user-specified weighted milestones are based on completed evidence. The Figm
 
 ## User actions eventually needed
 
-- Merge or copy `.github/workflows/ios-build.yml` to the fork's default branch, then dispatch it for `dev/personal-edition` in GitHub Actions (the connected GitHub tool has no workflow-dispatch action).
+- Review the first CI result and its unsigned IPA artifact. Manual dispatch through GitHub's Actions UI requires the workflow file to be present on the default branch; development pushes already run automatically.
 - Perform Apple account sign-in, sideload authorization, and physical iPhone validation.

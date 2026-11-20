@@ -106,7 +106,7 @@ If you do not agree with these terms, do not install or use this software.
 
 ## Personal Edition development
 
-This checkout is being prepared for a personal iPhone build. The audited upstream baseline is `8fc6d3b7be9571e3ffcb179de3d1de2dfe7012e7`. A manual-only GitHub Actions workflow is in `.github/workflows/ios-build.yml`; it selects Xcode 26.2 on `macos-26`, resolves the checked-in Swift package lockfile, builds simulator/device targets without signing, and packages an unsigned IPA plus logs. It has not yet run, so no successful build is claimed. The IPA must be signed by a legitimate sideloading tool before installation.
+This checkout is being prepared for a personal iPhone build. The audited upstream baseline is `8fc6d3b7be9571e3ffcb179de3d1de2dfe7012e7`. GitHub Actions in `.github/workflows/ios-build.yml` selects Xcode 26.2 on `macos-26`, resolves the checked-in Swift package lockfile, builds simulator/device targets without signing, and packages an unsigned IPA plus logs. It runs on pushes to `dev/personal-edition` and can also be started manually. No successful build is claimed until the first run completes. The IPA must be signed by a legitimate sideloading tool before installation.
 
 The account login approach and unfinished service methods are under review. Read [the security review](docs/SECURITY.md) before considering account sign-in. Progress and evidence are tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
 

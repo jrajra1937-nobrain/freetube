@@ -58,4 +58,4 @@ GitHub currently lists three open issues. Issues #3 and #4 are duplicate reports
 
 ## Compilation baseline status
 
-The audit commit is fixed above. The manual workflow added in this branch resolves the pinned dependencies, checks the scheme, conditionally runs tests if a test target exists, builds simulator and generic iOS device products without signing, packages an unsigned IPA for later signing, and uploads logs/artifacts. It has not run in this workspace. No successful compile or test is claimed.
+The audit commit is fixed above. The workflow added in this branch resolves the pinned dependencies, checks the scheme, conditionally runs tests if a test target exists, builds simulator and generic iOS device products without signing, packages an unsigned IPA for later signing, and uploads logs/artifacts. It runs on development-branch pushes and supports manual dispatch. A build result is only claimed after the GitHub Actions run completes.

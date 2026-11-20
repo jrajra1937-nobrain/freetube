@@ -6,7 +6,7 @@ The audited repository contains no `FreeTubeTests` directory, XCTest target, or 
 
 ## CI commands
 
-The manually dispatched `.github/workflows/ios-build.yml` runs:
+The `.github/workflows/ios-build.yml` workflow runs on development-branch pushes and supports manual dispatch. It:
 
 ```sh
 xcodebuild -list -json -project FreeTube/FreeTube.xcodeproj
