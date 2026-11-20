@@ -4,7 +4,7 @@ Updated: 2026-11-20
 
 ## Overall: 12% (Figma phase validated; audit and build remain in progress)
 
-The user-specified weighted milestones are based on completed evidence. The Figma milestone is validated at 10%; the source audit has roughly 20% of its 10% weight completed (2%). The build workflow is configured but has not executed.
+The user-specified weighted milestones are based on completed evidence. The Figma milestone is validated at 10%; the source audit has roughly 20% of its 10% weight completed (2%). The build workflow is configured and published to the connected fork, but has not executed. GitHub currently has no workflow on the fork's default branch, and the GitHub connector does not expose the workflow-dispatch operation.
 
 | Milestone | Weight | Status | Evidence |
 |---|---:|---|---|
@@ -23,11 +23,12 @@ The user-specified weighted milestones are based on completed evidence. The Figm
 - Inspected README, CLAUDE.md, LICENSE, integration guide, Xcode project, package lockfile, source tree, authentication/player entry points, and unfinished methods/TODOs; checked upstream issue tracker, dated dependency pins, and official Google OAuth/Data API documentation.
 - Added a manually dispatched GitHub Actions workflow for package resolution, conditional tests, simulator/device builds, unsigned IPA packaging and log artifacts.
 - Created the Figma design file with 14 iPhone screens, editable variables, reusable components and four UI states.
+- Published the audit, documentation and manual build workflow to `jrajra1937-nobrain/freetube` on `dev/personal-edition`; verified the remote branch and workflow file.
 - Added repository guidance and initial architecture/install/security/Figma/testing/maintenance documentation; verified official AltStore Windows ARM announcement and Apple free Personal Team limits.
 
 ## Outstanding
 
-- Run the workflow on a personal fork/repository; current workspace has no Xcode and cannot produce a compile result.
+- Make the workflow available from the repository default branch (GitHub requires a `workflow_dispatch` workflow there before it can be run against a development branch), then manually dispatch it; current workspace has no Xcode.
 - Integrate Figma components into SwiftUI only after the baseline build is confirmed.
 - Complete source-level audit of all code and package/license/security/update concerns.
 - Resolve compile failures found by CI before any visual redesign.
@@ -52,10 +53,10 @@ The user-specified weighted milestones are based on completed evidence. The Figm
 ## Test/build results
 
 - `git clone`: completed.
-- `xcodebuild`: unavailable on the Linux workspace; no compile, test, or IPA result is claimed.
+- `xcodebuild`: unavailable on the Linux workspace; GitHub workflow not dispatched yet, so no compile, test, or IPA result is claimed.
 - XCTest target: none present in audited baseline.
 
 ## User actions eventually needed
 
-- Put this branch in a repository you control so its manual workflow can run; then share the resulting workflow run/artifact if not otherwise connected.
+- Merge or copy `.github/workflows/ios-build.yml` to the fork's default branch, then dispatch it for `dev/personal-edition` in GitHub Actions (the connected GitHub tool has no workflow-dispatch action).
 - Perform Apple account sign-in, sideload authorization, and physical iPhone validation.
