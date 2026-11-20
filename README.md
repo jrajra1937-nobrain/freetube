@@ -104,6 +104,19 @@ If you do not agree with these terms, do not install or use this software.
 
 ---
 
+## Personal Edition development
+
+This checkout is being prepared for a personal iPhone build. The audited upstream baseline is `8fc6d3b7be9571e3ffcb179de3d1de2dfe7012e7`. A manual-only GitHub Actions workflow is in `.github/workflows/ios-build.yml`; it selects Xcode 26.2 on `macos-26`, resolves the checked-in Swift package lockfile, builds simulator/device targets without signing, and packages an unsigned IPA plus logs. It has not yet run, so no successful build is claimed. The IPA must be signed by a legitimate sideloading tool before installation.
+
+The account login approach and unfinished service methods are under review. Read [the security review](docs/SECURITY.md) before considering account sign-in. Progress and evidence are tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
+
+- [Architecture and upstream audit](docs/ARCHITECTURE.md)
+- [Installation](docs/INSTALLATION.md)
+- [Security](docs/SECURITY.md)
+- [Figma handoff](docs/FIGMA.md) · [Open the Figma design](https://www.figma.com/design/7mKy3p7ZwvknXS1nHtOtQI)
+- [Testing](docs/TESTING.md)
+- [Maintenance](docs/MAINTENANCE.md)
+
 ## Requirements
 
 - Xcode 15 or later

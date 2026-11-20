@@ -1,0 +1,110 @@
+name: iOS build (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: Run XCTest tests when a test target exists
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Resolve, test, and build iOS
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Record runner and Xcode versions
+        run: |
+          mkdir -p build-logs
+          sw_vers | tee build-logs/runner.txt
+          uname -a | tee -a build-logs/runner.txt
+          sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+          xcodebuild -version | tee build-logs/xcode-version.txt
+          xcodebuild -showsdks | tee build-logs/sdks.txt
+
+      - name: List schemes and targets
+        run: |
+          set -o pipefail
+          xcodebuild -list -json -project FreeTube/FreeTube.xcodeproj \
+            | tee build-logs/project-list.json
+
+      - name: Resolve pinned Swift packages
+        run: |
+          set -o pipefail
+          xcodebuild -resolvePackageDependencies \
+            -project FreeTube/FreeTube.xcodeproj \
+            -scheme FreeTube \
+            2>&1 | tee build-logs/resolve-packages.log
+
+      - name: Run tests when a test target exists
+        if: ${{ inputs.run_tests }}
+        run: |
+          set -o pipefail
+          if grep -q 'product-type.unit-test' FreeTube/FreeTube.xcodeproj/project.pbxproj; then
+            xcodebuild test \
+              -project FreeTube/FreeTube.xcodeproj \
+              -scheme FreeTube \
+              -destination 'platform=iOS Simulator,name=iPhone 17' \
+              -derivedDataPath "$RUNNER_TEMP/FreeTubeDerivedData" \
+              CODE_SIGNING_ALLOWED=NO \
+              2>&1 | tee build-logs/tests.log
+          else
+            printf '%s\n' 'SKIPPED: repository has no XCTest target.' | tee build-logs/tests-skipped.txt
+          fi
+
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project FreeTube/FreeTube.xcodeproj \
+            -scheme FreeTube \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/FreeTubeDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee build-logs/build-simulator.log
+
+      - name: Build for physical iOS devices (ARM64)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project FreeTube/FreeTube.xcodeproj \
+            -scheme FreeTube \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/FreeTubeDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee build-logs/build-device.log
+
+      - name: Package unsigned IPA for later signing
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/FreeTubeDerivedData/Build/Products/Release-iphoneos/FreeTube.app"
+          test -d "$APP"
+          mkdir -p package/Payload
+          ditto "$APP" package/Payload/FreeTube.app
+          ditto -c -k --sequesterRsrc --keepParent package/Payload FreeTube-unsigned.ipa
+          unzip -l FreeTube-unsigned.ipa | tee build-logs/ipa-contents.txt
+
+      - name: Upload build logs and unsigned IPA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: freetube-ios-${{ github.sha }}
+          path: |
+            FreeTube-unsigned.ipa
+            build-logs/
+          if-no-files-found: warn
+          retention-days: 14
